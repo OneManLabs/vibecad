@@ -27,7 +27,7 @@ import FreeCADGui as Gui
 from VibeCADCore import get_service
 from VibeCADDebug import list_provider_request_captures
 from VibeCADEditState import active_edit_object, active_edit_state
-from VibeCADProject import DEFAULT_MODELING_ENGINE
+from VibeCADProject import DEFAULT_MODELING_ENGINE, vibecad_data_dir
 from VibeCADOnboarding import START_CHOICES, choose_start, load_state, start_choice
 from VibeCADPromptStarters import (
     BUILTIN_PROMPT_STARTERS,
@@ -3875,12 +3875,12 @@ def register_startup_assistant() -> Any:
     return widget
 
 
-def _show_panel(text: str = "") -> None:
+def _show_panel(text: str = "") -> Any | None:
     try:
         from PySide import QtWidgets  # noqa: F401 - availability probe
     except Exception:
         _print(text or "VibeCAD assistant panel requires Qt.")
-        return
+        return None
 
     dock = _find_dock()
     if dock is None or not _assistant_panel_is_built(dock):
@@ -3889,7 +3889,7 @@ def _show_panel(text: str = "") -> None:
                 "VibeCAD assistant content is registered but the active "
                 "workbench has not created its dock window."
             )
-            return
+            return None
         widget = _build_panel_widget()
         if dock is not None:
             # Replace incomplete panel content without replacing the native dock.
@@ -3905,7 +3905,7 @@ def _show_panel(text: str = "") -> None:
                 message = f"VibeCAD assistant panel could not open: {exc}"
                 _warn(message)
                 _print(message)
-                return
+                return None
             dock.setMinimumWidth(300)
 
     dock.toggleViewAction().setVisible(True)
@@ -3926,40 +3926,159 @@ def _show_panel(text: str = "") -> None:
     _refresh_reference_chips(dock)
     _render_questions(dock)
     _render_assistant_run_state(dock)
+    return dock
 
 
 def show_assistant_for_active_workbench() -> None:
     _show_panel()
 
 
-def _apply_onboarding_choice(choice_id: str) -> None:
-    """Open the correct beginner surface and insert one editable request."""
+def _onboarding_local_document_path(choice_id: str) -> Path:
+    """Return one new persistent path for a local first-launch document."""
+
+    directory = vibecad_data_dir() / "local-projects"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / f"{choice_id}-{uuid.uuid4().hex}.FCStd"
+
+
+def _is_onboarding_local_document(document: Any) -> bool:
+    file_name = str(getattr(document, "FileName", "") or "").strip()
+    if not file_name:
+        return False
+    try:
+        parent = Path(file_name).expanduser().resolve().parent
+        expected = (vibecad_data_dir() / "local-projects").resolve()
+    except OSError:
+        return False
+    return parent == expected
+
+
+def _onboarding_document_identity(document: Any) -> tuple[str, str, str] | None:
+    if document is None:
+        return None
+    return (
+        str(getattr(document, "Uid", "") or "").strip(),
+        str(getattr(document, "Name", "") or "").strip(),
+        str(getattr(document, "FileName", "") or "").strip(),
+    )
+
+
+def _create_or_reuse_onboarding_document(choice_id: str) -> Any:
+    """Create a saved local document, or reuse one from a failed attempt."""
+
+    document = getattr(App, "ActiveDocument", None)
+    if document is None or not _is_onboarding_local_document(document):
+        internal_name = f"VibeCADDesign{uuid.uuid4().hex[:8]}"
+        document = App.newDocument(internal_name, "Untitled Design")
+    document = getattr(App, "ActiveDocument", None) or document
+    if document is None:
+        raise RuntimeError("VibeCAD could not create a local design document.")
+    if not str(getattr(document, "FileName", "") or "").strip():
+        document.saveAs(str(_onboarding_local_document_path(choice_id)))
+    file_name = str(getattr(document, "FileName", "") or "").strip()
+    if not file_name or not Path(file_name).is_file():
+        raise RuntimeError("VibeCAD could not save the local design document.")
+    return document
+
+
+def _set_onboarding_status(message: str) -> None:
+    dialog = _onboarding_dialog
+    if dialog is None:
+        return
+    try:
+        from PySide import QtWidgets
+
+        status = dialog.findChild(QtWidgets.QLabel, "VibeCADFirstLaunchStatus")
+    except Exception:
+        status = None
+    if status is not None:
+        status.setText(str(message or ""))
+        status.setVisible(bool(message))
+
+
+def _apply_onboarding_choice(choice_id: str) -> bool:
+    """Open one usable beginner workspace, then complete first launch."""
 
     global _onboarding_dialog
-    choice = start_choice(choice_id)
-    if choice_id == "modify-file":
-        Gui.runCommand("Std_Open")
-    elif App.ActiveDocument is None:
-        App.newDocument("UntitledDesign", "Untitled Design")
-    # The capability router can change the internal authoring strategy later.
-    # This activation only supplies the native beginner workspace.
-    Gui.activateWorkbench("PartDesignWorkbench")
-    _show_panel()
-    dock = _find_dock()
-    prompt = _find_child("QPlainTextEdit", "VibePrompt", dock)
-    if prompt is not None:
+    try:
+        choice = start_choice(choice_id)
+        _set_onboarding_status("")
+        if choice_id == "modify-file":
+            previous_document = getattr(App, "ActiveDocument", None)
+            previous_identity = _onboarding_document_identity(previous_document)
+            Gui.runCommand("Std_Open")
+            document = getattr(App, "ActiveDocument", None)
+            file_name = str(getattr(document, "FileName", "") or "").strip()
+            if (
+                document is None
+                or document is previous_document
+                or _onboarding_document_identity(document) == previous_identity
+                or not file_name
+            ):
+                raise RuntimeError("No saved CAD file was opened.")
+        else:
+            document = _create_or_reuse_onboarding_document(choice_id)
+        active_document = getattr(App, "ActiveDocument", None)
+        if active_document is None or (
+            active_document is not document
+            and _onboarding_document_identity(active_document)
+            != _onboarding_document_identity(document)
+        ):
+            raise RuntimeError("The local design document is not active.")
+        document_file = str(getattr(document, "FileName", "") or "").strip()
+        if not document_file:
+            raise RuntimeError("The active design document is not saved.")
+
+        # The capability router can change the internal authoring strategy later.
+        # This activation only supplies the native beginner workspace.
+        Gui.activateWorkbench("PartDesignWorkbench")
+        dock = _show_panel()
+        if dock is None or not _assistant_panel_is_built(dock):
+            raise RuntimeError("The VibeCAD assistant workspace did not open.")
+        visible = getattr(dock, "isVisible", None)
+        if not callable(visible) or not bool(visible()):
+            raise RuntimeError("The VibeCAD assistant workspace is not visible.")
+        prompt = _find_child("QPlainTextEdit", "VibePrompt", dock)
+        if prompt is None:
+            raise RuntimeError("The VibeCAD message field is not available.")
+
+        project = get_service().project_context()
+        project_document = dict(project.get("document") or {})
+        project_file = str(project_document.get("file_path") or "").strip()
+        if (
+            not bool(project.get("persistent"))
+            or not bool(project.get("document_saved"))
+            or not project_file
+        ):
+            raise RuntimeError("The VibeCAD project is not ready for local use.")
+        if Path(project_file).expanduser().resolve() != Path(
+            document_file
+        ).expanduser().resolve():
+            raise RuntimeError("The VibeCAD project does not match the active document.")
+
+        _render_assistant_run_state(dock)
+        if not prompt.isEnabled() or prompt.isReadOnly():
+            raise RuntimeError("The VibeCAD message field is not editable.")
         prompt.setPlainText(choice.prompt)
         prompt.setFocus()
         cursor = prompt.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         prompt.setTextCursor(cursor)
-    choose_start(choice_id)
+        choose_start(choice_id)
+    except Exception as exc:
+        message = f"VibeCAD could not prepare this workspace: {exc}"
+        _set_onboarding_status(message)
+        _warn(message)
+        return False
+
     if choice_id == "reference-image":
         _attach_image_from_panel()
     if _onboarding_dialog is not None:
-        _onboarding_dialog.close()
-        _onboarding_dialog.deleteLater()
+        dialog = _onboarding_dialog
         _onboarding_dialog = None
+        dialog.close()
+        dialog.deleteLater()
+    return True
 
 
 def _onboarding_provider_summary() -> str:
@@ -4016,6 +4135,12 @@ def _show_first_launch_onboarding() -> Any | None:
     )
     introduction.setWordWrap(True)
     layout.addWidget(introduction)
+    status = QtWidgets.QLabel("", dialog)
+    status.setObjectName("VibeCADFirstLaunchStatus")
+    status.setAccessibleName("First launch status")
+    status.setWordWrap(True)
+    status.setVisible(False)
+    layout.addWidget(status)
 
     choices = QtWidgets.QWidget(dialog)
     choices_layout = QtWidgets.QGridLayout(choices)

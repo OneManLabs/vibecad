@@ -347,3 +347,15 @@ Date: 2026-07-22. Status: Accepted.
 The application bundle, PKG receipt, release verifier, and uninstall check use `com.vibecad.desktop`. After cache restore, the workflow removes restored package environments and stale build products. It then compares all 256 VibeCAD Python files in the checkpoint source and the installed package environment by relative path and SHA-256 value. If a restored cache supplies stale product source, the gate fails.
 
 The clean-machine gate installs the one generated PKG. It uses the installed application to run one real automatic session transaction. The transaction creates a native Body, a fully constrained Sketch, and a Pad, and it accepts exactly one revision. The gate saves, closes, reopens, and checks STEP and STL round trips. Cleanup uses one fixed application path and requires a job-owned marker before removal. If the job did not install the application, cleanup does not remove it.
+
+## D-059: First launch completes only after a usable local project exists
+
+Date: 2026-07-22. Status: Accepted.
+
+A create choice saves a new local FCStd document before it records onboarding
+completion. An open-file choice completes only when the user opens a different,
+saved document. The active document, persistent project context, visible assistant
+dock, and enabled editable message field must refer to the same file. A cancelled
+file dialog or any workspace fault keeps the first-launch dialog open, shows an
+accessible status, and permits a retry. This prevents a successful-looking first
+launch that leaves the assistant unable to act.

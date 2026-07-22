@@ -269,6 +269,52 @@ Last update: 2026-07-22. Phase: 0, baseline and fork governance.
 - macOS package-source and clean-machine gates: 7 focused tests passed. The real local GUI smoke created the native parametric part, accepted one automatic revision, reopened it, and verified STEP and STL round trips. The process exited with code 0.
 - Final VibeCAD Python regression before the Apple Silicon CI run: 719 passed and the same 5 platform-dependent tests skipped in 23.01 seconds.
 
+## Phase 2 milestone report
+
+Milestone: Phase 2 product shell and beginner workflow.
+
+Implemented: First launch now creates a saved local project or opens a different
+saved file before it completes. It requires a visible assistant workspace and an
+editable prompt. Cancelled and failed setup stays retryable. Committed tests cover
+normal-run Stop, GUI-to-session steering, all seven stable states, human candidate
+review, keyboard Accept and Reject, Stop during review, real Tab and Shift-Tab
+navigation, keyboard start-choice activation, and light and dark contrast.
+
+Files changed: `VibeCADGui.py`, `TestVibeCADOnboarding.py`, onboarding and GUI
+contract tests, the implementation backlog, decisions, status, limitations, and
+the accessibility review.
+
+Tests added: Workspace readiness and fault cases, open cancellation, normal Stop,
+steering consumption, native keyboard traversal, native keyboard activation, and
+native light and dark contrast.
+
+Tests run: 44 focused Phase 2 tests passed. The complete VibeCAD Python suite run
+for this unit passed 798 tests with 5 platform skips. `TestVibeCADOnboarding` and
+`TestVibeCADCandidateReview` each reported one passing native GUI test and `OK`.
+
+Results: P2-001 acceptance criteria pass. A new user can create a persistent
+project without selecting an engine. Candidate validation preserves accepted
+state. Accept creates one revision. Reject and Stop create none.
+
+Benchmark impact: No live-model score changed. The beginner workflow can now
+reach a usable saved project for later benchmark prompts.
+
+Known issues: Both native GUI test processes still have the documented code-134
+FreeCAD shutdown defect after unittest reports `OK`. Full manual VoiceOver review
+remains open.
+
+Next milestone: Continue P1-001 artifact CI, the P4-001 case-attempt scoring
+contract, and the P7-001 security and performance gates.
+
+External blockers: Production Developer ID and notarization credentials only for
+credential-backed signing and notarization. Live-model scores require a provider
+that passes the existing readiness check.
+
 ## Exact next task
 
-Continue P1-001. Create a tested checkpoint commit and push it. Run the credential-free Apple Silicon CI path from that checkpoint. Verify the full app, DMG, unsigned PKG, SBOM, provenance, checksums, release identity, launcher, and package payload. Production Developer ID signing and Apple notarization remain blocked only by the acknowledged production credentials. Run live Tier 1 and Tier 2 benchmarks only when a configured provider passes the existing readiness gate. Keep deterministic and live-model scores separate by provider and model.
+Continue the active credential-free Apple Silicon package run for checkpoint
+`65283cc28683852f3c3ee77ae156f73021ac7163`. Fix any failing gate. Then commit the
+new Phase 2, performance, security, and benchmark-contract work and rerun the exact
+workflow at that new commit. Keep deterministic and live-model benchmark rates
+separate by provider and model. Production signing and notarization remain blocked
+only by the acknowledged Apple credentials.

@@ -34,7 +34,7 @@
       "milestone": "Phase 2",
       "work_item": "Implement the beginner-first application shell and AI run states",
       "dependencies": ["P0-001"],
-      "status": "in_progress",
+      "status": "complete",
       "test_requirements": ["first-launch UI", "engine-neutral intent choices", "failed workspace setup recovery", "keyboard navigation", "stop and steer", "theme tests", "stable seven-state event order", "validated human candidate review", "keyboard acceptance and rejection", "stop during review", "deterministic FreeCAD GUI acceptance", "byte-exact canonical SHA-256 invariance", "read-only project-context refresh"],
       "acceptance_criteria": ["A new user can create a project without selecting a workbench or engine", "Validation cannot change the canonical CAD file, accepted head, project manifest, accepted project entries, or accepted project-state hash", "Accept creates exactly one revision and Reject or Stop creates no revision"]
     },
