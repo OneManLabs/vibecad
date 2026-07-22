@@ -1,0 +1,38 @@
+name: VibeCAD Security Source Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out complete source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Run high-confidence tracked-source scan
+        run: |
+          python3 tools/security_source_scan.py \
+            --root . \
+            --json-output security-source-scan.json
+
+      - name: Upload scan evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-source-scan
+          path: security-source-scan.json
+          if-no-files-found: error
+          retention-days: 30

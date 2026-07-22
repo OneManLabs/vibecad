@@ -1,6 +1,7 @@
 # Project Status
 
-Last update: 2026-07-22. Phase: 0, baseline and fork governance.
+Last update: 2026-07-22. Active work: Phase 1 packaging, Phase 4 benchmark
+acceptance, and Phase 7 release hardening.
 
 ## Completed
 
@@ -310,11 +311,86 @@ External blockers: Production Developer ID and notarization credentials only for
 credential-backed signing and notarization. Live-model scores require a provider
 that passes the existing readiness check.
 
+## Phase 4 and Phase 7 progress report
+
+Milestone: Phase 4 conversational modeling and Phase 7 release hardening.
+
+Implemented: The version-2 capability router uses a versioned structured request,
+a closed capability-category set, explicit selection and manufacturing context,
+existing document structure, available engines, an optional project strategy
+lock, and deterministic reliability evidence. It routes professional requests to
+native internal workbenches. It preserves a compatible established engine and
+source workbench for follow-up edits. A safe native route is the default when no
+reliability evidence is available. Version-1 route records migrate to the new
+content-bound format.
+
+Implemented: The version-2 benchmark contract stores one complete record for each
+case and attempt. It requires geometry, dimensions, constraints, editability,
+follow-up, reopen, and export evidence. It also records provider, model, executor,
+question counts, retries, normalized usage, elapsed time, diagnostics, and
+instruction-adherence status. Deterministic and live-model completion rates stay
+separate. A live-model record requires a bounded human rating, reviewer identity,
+and notes. A deterministic record is explicitly not rated.
+
+Files changed: Capability-router, project-routing, benchmark-contract, Tier 1 and
+Tier 2 runner, benchmark aggregation, native routing integration, and focused test
+files are in the current worktree. Performance, source-security, SBOM,
+vulnerability, and release-gate files are also in progress.
+
+Tests added: Router request, migration, structure preservation, strategy lock,
+professional workbench, word-boundary, benchmark-contract, failed-evidence,
+performance-report, source-scan, SBOM, scanner-integrity, and vulnerability-gate
+tests.
+
+Tests run: The combined router and benchmark-contract group passed 47 tests. The
+native capability-router unittest reported one pass in 1.886 seconds and `OK`.
+The candidate-review unittest reported one pass in 3.429 seconds and `OK`. Each
+FreeCAD process then had the documented code-134 shutdown fault. One complete
+deterministic Tier 2 attempt passed all 10 functional-part cases. It used 187
+typed calls, created 10 accepted revisions, passed 10 close and reopen checks,
+and kept all 26 sketches fully constrained at zero degrees of freedom.
+
+Tests run: The complete VibeCAD Python suite passed 863 tests and skipped five
+platform tests in 9.46 seconds. The complete CTest inventory still has 1,687
+tests. All 1,680 enabled tests passed in 34.23 seconds. Three tests skipped and
+seven upstream tests stayed disabled. The individual reasons are recorded in
+the candidate-review report above. No CTest failed. The focused security and
+performance group passed 92 tests. The release-evidence self-test passed one
+positive case, 10 identity-tamper cases, and 12 artifact-tamper cases. The
+synthetic ad-hoc macOS app, DMG, and PKG smoke test also passed.
+
+Results: The deterministic Tier 2 result is 10 of 10 case attempts. This is
+deterministic transaction evidence. It is not a live-provider conversational
+score. No Tier 1 or Tier 2 live-provider human rating exists. P4-001 therefore
+remains in progress.
+
+Benchmark impact: The case-attempt denominator is now explicit and fail-closed.
+One failed case keeps its structured evidence and counts as one failed attempt.
+Deterministic results cannot satisfy a live-model target.
+
+Known issues: Phase 7 has local implementation and unit-test evidence only. The
+tracked-source scan passed locally with no finding and no read error. The exact
+release commit still needs CI source and dependency scans. The performance gate
+still needs a report from the application that the exact generated PKG installs.
+The release checklist remains open.
+
+Next milestone: Commit the tested router, benchmark, performance, security, SBOM,
+and release-gate units. Run the complete regression gates. Then run the
+credential-free Apple Silicon package workflow for that exact commit. Run live
+benchmark attempts only after a provider passes the bounded readiness check and
+human rating data is available.
+
+External blockers: Production Developer ID and notarization credentials are the
+only production release credential blocker. They block only credential-backed
+signing and notarization. A valid provider credential and human rating data are
+also required for live-model benchmark scores. Neither item blocks
+credential-free packaging, ad-hoc signing, deterministic benchmarks, security
+scans, performance tests, or other implementation work.
+
 ## Exact next task
 
-Continue the active credential-free Apple Silicon package run for checkpoint
-`65283cc28683852f3c3ee77ae156f73021ac7163`. Fix any failing gate. Then commit the
-new Phase 2, performance, security, and benchmark-contract work and rerun the exact
-workflow at that new commit. Keep deterministic and live-model benchmark rates
-separate by provider and model. Production signing and notarization remain blocked
-only by the acknowledged Apple credentials.
+Complete and test the current P4 and P7 worktree units. Commit them, then rerun
+the credential-free Apple Silicon package, source-security, dependency,
+performance, and clean-install gates for that exact commit. Keep deterministic
+and live-model benchmark rates separate by provider and model. Production signing
+and notarization remain blocked only by the acknowledged Apple credentials.

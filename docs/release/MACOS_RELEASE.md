@@ -23,9 +23,10 @@ Each architecture artifact contains:
 - `.dmg` and `.dmg-SHA256.txt`.
 - `.pkg` and `.pkg-SHA256.txt`.
 - `SHA256SUMS`.
-- CycloneDX 1.5 SBOM.
+- CycloneDX 1.5 SBOM with scanner-ready package URLs and package SHA-256 values.
 - in-toto statement with SLSA provenance predicate.
 - Versioned update manifest and detached signature for production builds.
+- Raw Grype vulnerability report and versioned VibeCAD vulnerability evidence.
 
 The signed update manifest binds each artifact name, byte size, SHA-256 value, and HTTPS URL. The desktop app asks before download. It downloads to a unique temporary file, verifies the signed size and digest, and promotes without overwriting another file. On macOS it then runs DMG verification, Gatekeeper assessment, and stapled-ticket validation. It asks again before it reveals the package in Finder. It does not mount, open, execute, or install the package.
 
@@ -36,6 +37,14 @@ The workflow applies permissions per job. The preparation and macOS build jobs g
 Local verification completed for shell syntax, workflow YAML, evidence generation, checksum generation, CycloneDX output, provenance output, and unsigned PKG construction. Seven focused package-source and clean-machine tests passed. In the complete VibeCAD Python suite, 719 tests passed and the same 5 platform-dependent tests were skipped in 23.01 seconds. Credential-backed signing and notarization were not attempted because production credentials are unavailable.
 
 `tools/verify_macos_release.py` mounts the DMG read-only, checks that it contains one application, verifies the bundle identifier, version, and code signature, runs the launcher smoke mode, expands and inspects the PKG payload, and verifies the SBOM and provenance artifact digests. It compares the application name, release version, source repository, source commit, builder, build type, and update channel with trusted workflow values. The provenance and update manifest must describe exactly the DMG and PKG under test. Production mode also requires Gatekeeper, Developer ID Installer, and stapling checks.
+
+The release workflow downloads Grype 0.116.0 from the official release. It
+checks the archive against repository-pinned Apple Silicon or Intel SHA-256
+data before extraction. Grype scans the generated SBOM after evidence creation.
+An unresolved critical or high finding stops the job. The workflow uploads both
+the raw scanner JSON and the content-bound VibeCAD decision record. The database
+must be no more than 72 hours old and no more than 10 minutes in the future at
+the recorded evaluation time.
 
 The release evidence self-test passed one positive case, 10 release-identity tamper cases, and 12 artifact tamper cases. The local release smoke self-test created a synthetic ad-hoc signed app, DMG, unsigned PKG, SBOM, provenance statement, and update manifest. The same release verifier passed all synthetic artifacts.
 

@@ -359,3 +359,62 @@ dock, and enabled editable message field must refer to the same file. A cancelle
 file dialog or any workspace fault keeps the first-launch dialog open, shows an
 accessible status, and permits a retry. This prevents a successful-looking first
 launch that leaves the assistant unable to act.
+
+## D-060: Capability routing uses a versioned structured decision
+
+Date: 2026-07-22. Status: Accepted.
+
+The router gets one versioned request with the capability category, current
+selection, manufacturing intent, existing document structure, available engines,
+current engine, optional project strategy lock, and reliability evidence. The
+category set is closed. Matching uses complete words or phrases so words such as
+`camera` and `amount` cannot select CAM or mount logic by substring. Professional
+drawing, assembly, FEM, CAM, BIM, surface, spreadsheet, mesh, and sketch requests
+select their native internal workbench. A compatible follow-up edit keeps the
+established engine and source professional workbench. When no explicit
+reliability evidence exists, native modeling is the safe default.
+
+The decision uses `vibecad-capability-route-v2`. Its content identity binds the
+request, selected engine, internal workbench, reason, and evidence. Project
+metadata stores the optional strategy lock and the verified route. Version-1
+records migrate, but an unknown request version, category, engine, or changed
+content identity fails. The beginner interface does not ask the user to choose a
+workbench or engine.
+
+## D-061: Benchmark scores use complete case-attempt evidence
+
+Date: 2026-07-22. Status: Accepted.
+
+One `vibecad-benchmark-case-attempt-v2` record is one case in one attempt. A
+record must contain each of the seven validation stages exactly once: geometry,
+dimensions, constraints, editability, follow-up, reopen, and export. It also
+contains provider, model, executor, questions, unnecessary questions, retries,
+normalized usage, elapsed time, diagnostics, artifacts, and instruction
+adherence. The series denominator is the number of complete case attempts, not
+the number of whole trial rounds. Missing, duplicate, malformed, or truncated
+case evidence fails the series.
+
+Deterministic and live-model scores are separate. Deterministic instruction
+adherence is `not_rated`, and its target rate is null. A live-model attempt cannot
+pass without a bounded human rating, reviewer identity, and notes. A failed case
+keeps its valid structured evidence and counts as a failed attempt. Therefore, a
+deterministic pass cannot be presented as the Tier 1 or Tier 2 live-model product
+target.
+
+## D-062: Phase 7 release evidence comes from the exact candidate package
+
+Date: 2026-07-22. Status: Accepted.
+
+Local source scans and unit tests can verify gate behavior, but they cannot close
+the production release checklist. The security gate must bind the exact source
+commit, dependency inventory, SBOM, scanner and database identity, findings, and
+time-bounded risk decisions. The performance gate must measure the application
+installed from the exact candidate PKG and must bind its source commit. Runtime
+waivers are not accepted. The clean-install, source-security, dependency,
+performance, and release-verification outputs remain open until CI produces and
+checks them for one exact candidate.
+
+Production Developer ID and notarization credentials are required only for the
+credential-backed signing and notarization gates. Their absence does not stop
+ad-hoc signing, credential-free packaging, scanning, installed-package testing,
+or other release work.

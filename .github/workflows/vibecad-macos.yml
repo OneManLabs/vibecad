@@ -314,6 +314,67 @@ jobs:
           openssl dgst -sha256 -verify "${RUNNER_TEMP}/update-public.pem" \
             -signature "${RUNNER_TEMP}/update-signature.bin" "${manifest[0]}"
 
+      - name: Install verified Grype vulnerability scanner
+        shell: bash
+        env:
+          GRYPE_VERSION: "0.116.0"
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          case "${TARGET_ARCH}" in
+            arm64)
+              grype_arch="arm64"
+              ;;
+            x86_64)
+              grype_arch="amd64"
+              ;;
+            *)
+              echo "Unsupported Grype architecture: ${TARGET_ARCH}" >&2
+              exit 1
+              ;;
+          esac
+          archive="grype_${GRYPE_VERSION}_darwin_${grype_arch}.tar.gz"
+          archive_path="${RUNNER_TEMP}/${archive}"
+          scanner_dir="${RUNNER_TEMP}/vibecad-grype-${GRYPE_VERSION}"
+          curl --fail --location --retry 3 \
+            --output "${archive_path}" \
+            "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/${archive}"
+          python3 tools/verify_grype_archive.py \
+            --archive "${archive_path}" \
+            --architecture "${TARGET_ARCH}" \
+            --version "${GRYPE_VERSION}"
+          mkdir -p "${scanner_dir}"
+          tar -xzf "${archive_path}" -C "${scanner_dir}" grype
+          test -x "${scanner_dir}/grype"
+          actual_version="$("${scanner_dir}/grype" version | awk '$1 == "Version:" {print $2}')"
+          if [[ "${actual_version}" != "${GRYPE_VERSION}" ]]; then
+            echo "Unexpected Grype version: ${actual_version}" >&2
+            exit 1
+          fi
+          echo "${scanner_dir}" >> "${GITHUB_PATH}"
+          "${scanner_dir}/grype" db update
+
+      - name: Scan macOS SBOM for release vulnerabilities
+        shell: bash
+        env:
+          VIBECAD_SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          evidence=(package/rattler-build/osx/VibeCAD-*-release-evidence)
+          if [[ "${#evidence[@]}" -ne 1 || ! -d "${evidence[0]}" ]]; then
+            echo "Expected exactly one macOS release-evidence directory." >&2
+            exit 1
+          fi
+          sbom="${evidence[0]}/vibecad-macos.cdx.json"
+          scanner_report="${evidence[0]}/grype-vulnerability-scan.json"
+          vulnerability_evidence="${evidence[0]}/vibecad-vulnerability-evidence.json"
+          grype "sbom:${sbom}" --output json > "${scanner_report}"
+          python3 tools/security_source_scan.py \
+            --scanner-json "${scanner_report}" \
+            --sbom "${sbom}" \
+            --source-sha "${VIBECAD_SOURCE_SHA}" \
+            --vulnerability-output "${vulnerability_evidence}"
+
       - name: Verify macOS release contents
         shell: bash
         env:
@@ -386,6 +447,27 @@ jobs:
             --verify-report "${smoke_root}/smoke-report.json" \
             --expected-root "${smoke_root}" \
             --expected-application "${installed_app}"
+
+      - name: Measure installed macOS performance
+        timeout-minutes: 10
+        shell: bash
+        env:
+          VIBECAD_SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          application="/Applications/VibeCAD.app"
+          performance_root="${RUNNER_TEMP}/vibecad-macos-performance"
+          evidence=(package/rattler-build/osx/VibeCAD-*-release-evidence)
+          if [[ "${#evidence[@]}" -ne 1 || ! -d "${evidence[0]}" ]]; then
+            echo "Expected exactly one macOS release-evidence directory." >&2
+            exit 1
+          fi
+          python3 tools/macos_performance_gate.py \
+            --measure \
+            --application "${application}" \
+            --root "${performance_root}" \
+            --source-sha "${VIBECAD_SOURCE_SHA}" \
+            --report "${evidence[0]}/vibecad-macos-performance.json"
 
       - name: Remove clean-machine test installation
         if: always()

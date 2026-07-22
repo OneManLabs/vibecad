@@ -191,6 +191,7 @@ sed -i "s/APPLICATION_MENU_NAME/${application_menu_name}/" "${conda_env}/../Info
 
 pixi list -e default > "${app_name}/Contents/packages.txt"
 sed -i '1s/.*/\nLIST OF PACKAGES:/' "${app_name}/Contents/packages.txt"
+pixi list -e default --json > "${app_name}/Contents/packages.json"
 
 # move plugins into their final location (Library only exists for macOS < 15.0 builds)
 if [ -d "${conda_env}/Library" ]; then
@@ -312,7 +313,7 @@ evidence_dir="${version_name}-release-evidence"
 python3 ../../../tools/generate_release_evidence.py \
     --artifact "${version_name}.dmg" \
     --artifact "${pkg_name}" \
-    --packages "${app_name}/Contents/packages.txt" \
+    --packages "${app_name}/Contents/packages.json" \
     --output-dir "${evidence_dir}" \
     --source-uri "${VIBECAD_SOURCE_URI:-https://github.com/10-X-eng/vibecad}" \
     --source-sha "${VIBECAD_SOURCE_SHA:-$(git -C ../../.. rev-parse HEAD)}" \

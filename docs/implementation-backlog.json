@@ -1,6 +1,6 @@
 {
   "schema": "vibecad-implementation-backlog-v1",
-  "updated_at": "2026-07-22T22:19:20Z",
+  "updated_at": "2026-07-22T23:14:05Z",
   "items": [
     {
       "id": "P0-001",
@@ -71,8 +71,8 @@
       "work_item": "Implement automatic modeling strategy and Tier 1 and Tier 2 benchmark workflows",
       "dependencies": ["P3-002", "P2-001"],
       "status": "in_progress",
-      "test_requirements": ["automatic strategy routing and structure preservation", "Tier 1 deterministic provider transaction benchmark for all seven classes", "Tier 1 live-model benchmark by provider and model", "Tier 2 benchmark", "selection-aware edits", "reopen and export"],
-      "acceptance_criteria": ["Tier 1 is at least 95 percent", "Tier 2 is at least 85 percent or each failure is documented"]
+      "test_requirements": ["versioned automatic strategy routing and structure preservation", "professional native capability routing", "persistent strategy lock", "Tier 1 deterministic provider transaction benchmark for all seven classes", "version-2 case-attempt evidence contract", "Tier 1 live-model benchmark with human ratings by provider and model", "complete 10-case Tier 2 benchmark", "selection-aware edits", "save close reopen and export"],
+      "acceptance_criteria": ["Tier 1 live-model completion is at least 95 percent by case attempt for each claimed provider and model", "Tier 2 live-model completion is at least 85 percent by case attempt or each failure is retained and documented", "Deterministic and live-model completion rates remain separate"]
     },
     {
       "id": "P5-001",
@@ -232,9 +232,9 @@
       "milestone": "Phase 7",
       "work_item": "Complete release security, privacy, performance, accessibility, recovery, and clean-machine gates",
       "dependencies": ["P1-001", "P4-001", "P5-001", "P6-001"],
-      "status": "pending",
-      "test_requirements": ["security suite", "performance suite", "accessibility review", "clean-machine acceptance"],
-      "acceptance_criteria": ["No critical or high unmitigated issue remains", "Production release checklist passes"]
+      "status": "in_progress",
+      "test_requirements": ["exact-commit tracked-source scan", "exact-SBOM dependency vulnerability scan", "scanner archive integrity", "time-bounded vulnerability decisions", "installed-PKG performance suite", "accessibility review", "clean-machine acceptance", "release evidence identity"],
+      "acceptance_criteria": ["No critical or high unmitigated issue remains", "The exact candidate PKG meets all approved performance budgets", "Production release checklist passes with evidence bound to one source commit"]
     },
     {
       "id": "P8-001",
