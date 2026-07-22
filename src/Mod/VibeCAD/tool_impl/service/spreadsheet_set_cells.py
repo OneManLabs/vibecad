@@ -239,7 +239,10 @@ def run(
                         "FreeCAD did not retain the content as a formula."
                     )
             else:
-                content_matches = actual_content == write["content"]
+                content_matches = _content_matches(
+                    actual_content, write["content"]
+                )
+                record["native_content"] = actual_content
             alias_matches = (
                 write["alias"] is None
                 or (record["after"] or {}).get("alias") == write["alias"]
@@ -260,6 +263,10 @@ def run(
             if record["status"] != "ok":
                 break
             successful_prefix += 1
+        recomputed_dependents: list[str] = []
+        if successful_prefix == len(writes):
+            recomputed_dependents = _touch_expression_dependents(active, target)
+            active.recompute()
         return {
             "document": active.Name,
             "sheet": target.Name,
@@ -275,6 +282,7 @@ def run(
                 record for record in entries if record["status"] == "not_attempted"
             ],
             "entries": entries,
+            "recomputed_dependents": recomputed_dependents,
         }
 
     def verify(result: dict[str, Any]) -> dict[str, Any]:
@@ -310,6 +318,27 @@ def run(
 
 def _invalid(message: str, **details: Any) -> dict[str, Any]:
     return {"ok": False, "error": message, "retry_same_call": False, **details}
+
+
+def _content_matches(actual: str, requested: str) -> bool:
+    """Treat FreeCAD's leading apostrophe as an explicit plain-text marker."""
+    return actual in {requested, "'" + requested, "=" + requested}
+
+
+def _touch_expression_dependents(document: Any, sheet: Any) -> list[str]:
+    prefixes = (f"{sheet.Name}.", f"<<{sheet.Label}>>.")
+    touched: list[str] = []
+    for obj in list(getattr(document, "Objects", []) or []):
+        if obj is sheet:
+            continue
+        expressions = list(getattr(obj, "ExpressionEngine", []) or [])
+        if any(
+            any(prefix in str(expression or "") for prefix in prefixes)
+            for _property, expression in expressions
+        ):
+            obj.touch()
+            touched.append(obj.Name)
+    return sorted(touched)
 
 
 def _read_cell_state(sheet: Any, address: str) -> dict[str, Any]:

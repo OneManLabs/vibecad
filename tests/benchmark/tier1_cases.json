@@ -1,0 +1,14 @@
+{
+  "schema": "vibecad-cad-benchmark-suite-v1",
+  "version": 1,
+  "tier": 1,
+  "cases": [
+    {"id": "t1_exact_box", "prompt": "Create a box that is 40 mm wide, 30 mm deep, and 20 mm tall.", "operation": "exact_box"},
+    {"id": "t1_centered_hole", "prompt": "Add a centered 6 mm hole through a 40 by 30 by 10 mm plate.", "operation": "centered_hole"},
+    {"id": "t1_round_edges", "prompt": "Round the outer edges of a 30 mm cube by 2 mm.", "operation": "round_edges"},
+    {"id": "t1_hollow_enclosure", "prompt": "Make a 60 by 40 by 25 mm hollow enclosure with 2 mm walls and an open top.", "operation": "hollow_enclosure"},
+    {"id": "t1_change_dimension", "prompt": "Change the box width from 40 mm to 55 mm.", "operation": "change_dimension"},
+    {"id": "t1_mirror_feature", "prompt": "Mirror this 5 mm hole across the center of the plate.", "operation": "mirror_feature"},
+    {"id": "t1_export_stl", "prompt": "Export this exact 20 mm cube for 3D printing.", "operation": "export_stl"}
+  ]
+}

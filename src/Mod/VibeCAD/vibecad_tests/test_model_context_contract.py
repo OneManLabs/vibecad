@@ -114,6 +114,21 @@ def test_turn_history_is_never_copied_into_model_context() -> None:
     assert "previous_completed_exchange" not in serialized
 
 
+def test_design_brief_is_bounded_turn_start_state() -> None:
+    current = "Make the mounting holes larger."
+    brief = {
+        "schema": "vibecad-design-brief-v1",
+        "version": 1,
+        "revision": "a" * 64,
+        "purpose": "Wall-mounted enclosure",
+        "units": "mm",
+        "critical_dimensions": [{"name": "width", "value": 120, "unit": "mm"}],
+    }
+    payload, _ = _prompt_payload(current, {**_active_state(), "design_brief": brief})
+    assert payload["active_state"]["design_brief"] == brief
+    assert "path" not in json.dumps(payload)
+
+
 @pytest.mark.parametrize("object_count", (10, 100, 1000))
 def test_turn_context_size_does_not_scale_with_document_objects(object_count: int) -> None:
     payload, _ = _prompt_payload("Continue.", _active_state(object_count))
@@ -181,6 +196,13 @@ def test_provider_context_does_not_copy_conversation_cache() -> None:
     service.provider_turn_selection_summary = lambda: _active_state()["selection"]
     service.view_screenshot_summary = lambda: {"captured": False}
     service.pending_reference_image_attachments = lambda: []
+    service.design_brief = lambda: {
+        "schema": "vibecad-design-brief-v1",
+        "version": 1,
+        "revision": "0" * 64,
+        "purpose": "",
+        "units": "mm",
+    }
     service._conversation_cache = [
         {"role": "user", "content": f"must not leak {index}"}
         for index in range(1000)

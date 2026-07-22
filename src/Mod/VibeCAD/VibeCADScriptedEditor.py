@@ -2865,6 +2865,26 @@ class ScriptedEditorController:
         if not self.model_id or not self.accepted_revision:
             self.status.setText("Accept a valid model revision before exporting it.")
             return
+        service = get_service()
+        try:
+            service.authorize("export")
+            from VibeCADManagedPolicy import enforce_action, load_managed_policy
+
+            enforce_action(load_managed_policy(), "export")
+        except (PermissionError, RuntimeError) as exc:
+            try:
+                service.record_audit_event(
+                    category="export",
+                    action="scripted_model",
+                    outcome="blocked",
+                    actor_type="user",
+                    details={"reason": "managed_policy", "model_id": self.model_id},
+                )
+            except Exception as audit_exc:
+                self.status.setText(f"Export blocked: {exc}; audit failed: {audit_exc}")
+                return
+            self.status.setText(f"Export blocked: {exc}")
+            return
         doc = App.ActiveDocument
         if doc is None:
             return
@@ -2881,6 +2901,21 @@ class ScriptedEditorController:
         if not selected:
             return
         suffix = Path(selected).suffix.lower()
+        try:
+            service.record_audit_event(
+                category="export",
+                action="scripted_model",
+                outcome="attempted",
+                actor_type="user",
+                details={
+                    "model_id": self.model_id,
+                    "revision": self.accepted_revision,
+                    "format": suffix.lstrip("."),
+                },
+            )
+        except Exception as exc:
+            self.status.setText(f"Export stopped because audit recording failed: {exc}")
+            return
         fidelity = str(self.model.get("fidelity") or "")
         if suffix in {".step", ".stp"} and fidelity in {"faceted_brep", "mixed"}:
             answer = self.QtWidgets.QMessageBox.warning(
@@ -2909,7 +2944,22 @@ class ScriptedEditorController:
             else:
                 raise RuntimeError(f"Unsupported export extension: {suffix}")
         except Exception as exc:
+            try:
+                service.record_audit_event(
+                    category="export", action="scripted_model", outcome="failed",
+                    actor_type="user", details={"model_id": self.model_id, "format": suffix.lstrip(".")},
+                )
+            except Exception:
+                pass
             self.status.setText(f"Export failed: {exc}")
+            return
+        try:
+            service.record_audit_event(
+                category="export", action="scripted_model", outcome="success",
+                actor_type="user", details={"model_id": self.model_id, "format": suffix.lstrip(".")},
+            )
+        except Exception as exc:
+            self.status.setText(f"Export completed, but audit recording failed: {exc}")
             return
         self.status.setText(f"Exported accepted revision to {selected}")
 

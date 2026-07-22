@@ -845,7 +845,20 @@ def analyze_operation(
     simulator = PathSimulator.PathSim()
     simulator.BeginSimulation(stock, resolution)
     simulator.SetToolShape(tool_shape, resolution)
-    endpoint_tolerance = max(1.0e-6, resolution * 1.0e-6)
+    # PathSimulator stores command positions at lower precision than the
+    # double-precision Path.Geom endpoint. Bound the permitted conversion
+    # drift by model scale while keeping it far below the simulation cell.
+    coordinate_scale = max(
+        1.0,
+        *(abs(float(value)) for value in (
+            stock.BoundBox.XMin, stock.BoundBox.XMax,
+            stock.BoundBox.YMin, stock.BoundBox.YMax,
+            stock.BoundBox.ZMin, stock.BoundBox.ZMax,
+        )),
+    )
+    endpoint_tolerance = max(
+        1.0e-6, resolution * 1.0e-6, coordinate_scale * 5.0e-7
+    )
 
     position = FreeCAD.Placement(
         FreeCAD.Vector(0.0, 0.0, stock.BoundBox.ZMax),

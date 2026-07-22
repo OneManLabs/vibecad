@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import import_module
 import json
+from pathlib import Path
 import time
 from typing import Any, Callable
 
@@ -27,6 +28,16 @@ from VibeCADProvider import (
     provider_tool_schema_digest,
 )
 from VibeCADIntentMemoryCompiler import compile_intent_memory_update
+from VibeCADManagedPolicy import (
+    enforce_provider,
+    enforce_provider_tool,
+    filter_provider_context,
+    load_managed_policy,
+    provider_tool_allowed,
+)
+from VibeCADAcceptance import VibeCADAcceptanceCoordinator
+from VibeCADProject import VibeCADProjectStore, now_iso
+from VibeCADRevision import create_revision_record
 from VibeCADModelingSurface import (
     CORE_CONVERSATION_VIEW_TOOLS,
     HIDDEN_PROVIDER_INSPECTION_TOOLS,
@@ -50,12 +61,26 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 CancellationCheck = Callable[[], bool]
 SteeringCheck = Callable[[], list[str]]
 QuestionCallback = Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+CandidateDecisionCallback = Callable[[Mapping[str, Any]], str]
 DocumentThreadDispatch = Callable[[Callable[[], Any]], Any]
+
+RUN_STATES = (
+    "Understanding",
+    "Inspecting design",
+    "Planning",
+    "Creating preview",
+    "Validating",
+    "Applying revision",
+    "Complete",
+)
+
+MUTATING_SAFETY_LEVELS = {"safe_write", "write", "destructive"}
 
 PROVIDER_SAFE_LEVELS = {
     SafetyLevel.READ,
     SafetyLevel.VIEW,
     SafetyLevel.SAFE_WRITE,
+    SafetyLevel.EXTERNAL,
 }
 
 CORE_PROVIDER_TOOLS = set(CORE_CONVERSATION_VIEW_TOOLS)
@@ -593,6 +618,16 @@ def choose_provider(
     if not prefer_online:
         return OfflineProvider()
     provider_name = service.provider_name()
+    policy = load_managed_policy()
+    if policy.get("managed"):
+        if policy.get("local_only"):
+            return OfflineProvider()
+        enforce_provider(
+            policy,
+            provider_name,
+            service.provider_model(),
+            service.provider_base_url(),
+        )
     auth = service.auth_state()
     if provider_name != "chatgpt" and not auth.can_call_provider:
         return OfflineProvider()
@@ -601,7 +636,10 @@ def choose_provider(
             model=service.provider_model(),
             reasoning_effort=service.provider_reasoning_effort(),
             web_search_enabled=service.web_search_enabled(),
-            skills_enabled=service.codex_skills_enabled(),
+            skills_enabled=(
+                service.codex_skills_enabled()
+                and (not policy.get("managed") or policy.get("external_plugins_enabled"))
+            ),
         )
     if provider_name == "anthropic":
         return AnthropicProvider(
@@ -881,6 +919,7 @@ def _context_for_provider(
         "selection",
         "view_screenshot",
         "reference_images",
+        "design_brief",
     )
     context = {
         key: raw_context[key]
@@ -926,6 +965,33 @@ def _context_for_provider(
     if session_trigger:
         context["session_trigger"] = dict(session_trigger)
     return context
+
+
+def _apply_managed_outbound_policy(
+    context: dict[str, Any],
+    policy: dict[str, Any],
+    *,
+    online: bool,
+) -> dict[str, Any]:
+    filtered = filter_provider_context(context, policy, online=online)
+    schemas = [
+        dict(schema)
+        for schema in list(filtered.get("provider_tool_schemas") or [])
+        if isinstance(schema, dict)
+        and provider_tool_allowed(
+            policy, str(schema.get("name") or ""), online=online
+        )
+    ]
+    filtered["provider_tool_schemas"] = schemas
+    surface = filtered.get("provider_tool_surface")
+    if isinstance(surface, dict) and surface.get("kind") == "turn_start_snapshot":
+        copy = dict(surface)
+        names = [str(schema.get("name") or "") for schema in schemas]
+        copy["tool_names"] = names
+        copy["schema_count"] = len(schemas)
+        copy["schema_sha256"] = provider_tool_schema_digest(schemas)
+        filtered["provider_tool_surface"] = copy
+    return filtered
 
 
 def _consume_context_view_attachment(
@@ -1069,6 +1135,7 @@ def _provider_state_payload(context: dict[str, Any]) -> dict[str, Any]:
         "modeling_surface",
         "document",
         "selection",
+        "design_brief",
     )
     return {
         key: context[key]
@@ -1195,6 +1262,31 @@ def _emit(progress_callback: ProgressCallback | None, event: dict[str, Any]) -> 
     if progress_callback is None:
         return
     progress_callback(event)
+
+
+def _emit_run_state(
+    progress_callback: ProgressCallback | None,
+    state: str,
+) -> None:
+    """Emit one stable beginner-facing run state."""
+    if state not in RUN_STATES:
+        raise ValueError(f"Unknown VibeCAD run state: {state}")
+    _emit(progress_callback, {"event": "run_state_changed", "state": state})
+
+
+def _candidate_decision(
+    callback: CandidateDecisionCallback | None,
+    review_payload: Mapping[str, Any],
+) -> tuple[str, str]:
+    """Return the exact candidate decision and its provenance mode."""
+    if callback is None:
+        return "accept", "automatic"
+    decision = callback(dict(review_payload))
+    if decision not in {"accept", "reject"}:
+        raise ValueError(
+            "The candidate decision callback must return exactly 'accept' or 'reject'."
+        )
+    return decision, "human"
 
 
 _TRACE_ITEM_LIMIT = 32
@@ -1768,9 +1860,43 @@ def make_provider_tool_runner(
     turn_surface: dict[str, Any] | None = None,
     turn_schemas: list[dict[str, Any]] | None = None,
     turn_modeling_surface: dict[str, Any] | None = None,
+    managed_policy: dict[str, Any] | None = None,
+    provider_online: bool = False,
 ):
-    frozen_schemas = json.loads(json.dumps(turn_schemas or []))
-    frozen_modeling_surface = json.loads(json.dumps(turn_modeling_surface or {}))
+    authorized_surface = json.loads(json.dumps(turn_surface)) if isinstance(turn_surface, dict) else None
+    authorized_schemas = json.loads(json.dumps(turn_schemas or []))
+    authorized_modeling_surface = json.loads(json.dumps(turn_modeling_surface or {}))
+
+    def accept_controlled_surface_transition(tool_name: str) -> None:
+        nonlocal authorized_surface, authorized_schemas, authorized_modeling_surface
+        if tool_name not in {"partdesign.edit_sketch", "sketcher.close_sketch"}:
+            return
+        refreshed = _on_document_thread(
+            document_thread_dispatch, lambda: _context_for_provider(service, session_trigger)
+        )
+        candidate = refreshed.get("provider_tool_surface")
+        if not isinstance(candidate, dict) or not isinstance(authorized_surface, dict):
+            raise RuntimeError("The controlled CAD surface transition has no valid surface record.")
+        before = (
+            str(authorized_surface.get("workbench") or ""),
+            str(authorized_surface.get("engine") or ""),
+        )
+        after = (str(candidate.get("workbench") or ""), str(candidate.get("engine") or ""))
+        allowed = {
+            "partdesign.edit_sketch": (("PartDesignWorkbench", "native"), ("SketcherWorkbench", "native")),
+            "sketcher.close_sketch": (("SketcherWorkbench", "native"), ("PartDesignWorkbench", "native")),
+        }
+        if (before, after) != allowed[tool_name]:
+            raise RuntimeError(
+                f"The {tool_name} surface transition is not authorized: {before!r} to {after!r}."
+            )
+        schemas = refreshed.get("provider_tool_schemas")
+        modeling = refreshed.get("modeling_surface")
+        if not isinstance(schemas, list) or not isinstance(modeling, dict):
+            raise RuntimeError("The controlled CAD surface transition has no provider schema set.")
+        authorized_surface = json.loads(json.dumps(candidate))
+        authorized_schemas = json.loads(json.dumps(schemas))
+        authorized_modeling_surface = json.loads(json.dumps(modeling))
 
     def run(tool_name: str, arguments_json: str = "{}") -> dict[str, Any]:
         started = time.monotonic()
@@ -1786,6 +1912,15 @@ def make_provider_tool_runner(
                     document_thread_dispatch,
                     lambda: service.note_provider_tool_targets(args, payload),
                 )
+            if bool(payload.get("ok")) and tool_name in {"partdesign.edit_sketch", "sketcher.close_sketch"}:
+                try:
+                    accept_controlled_surface_transition(tool_name)
+                except Exception as exc:
+                    payload = tool_failure(
+                        tool_name, "CONTROLLED_SURFACE_TRANSITION_FAILED", "surface",
+                        str(exc), requested=args,
+                        observed={"exception_type": type(exc).__name__},
+                    )
             trace_payload = dict(payload)
             trace_payload.pop("_vibecad_image_attachment", None)
             trace_result = _trace_result(trace_payload)
@@ -1829,11 +1964,11 @@ def make_provider_tool_runner(
         active_workbench = live_surface["workbench"]
         runtime_state = live_surface["runtime_state"]
         visible_names = live_surface["tool_names"]
-        if isinstance(turn_surface, dict):
+        if isinstance(authorized_surface, dict):
             expected_tuple = {
-                "workbench": str(turn_surface.get("workbench") or ""),
-                "engine": str(turn_surface.get("engine") or ""),
-                "surface_id": str(turn_surface.get("surface_id") or ""),
+                "workbench": str(authorized_surface.get("workbench") or ""),
+                "engine": str(authorized_surface.get("engine") or ""),
+                "surface_id": str(authorized_surface.get("surface_id") or ""),
             }
             observed_tuple = {
                 "workbench": str(active_workbench or ""),
@@ -1894,6 +2029,28 @@ def make_provider_tool_runner(
                     required_changes=[{"choose_available_tool": visible_names}],
                 )
             )
+        authorizer = getattr(service, "authorize", None)
+        if callable(authorizer):
+            permission = (
+                "design.modify"
+                if tool.safety.value in MUTATING_SAFETY_LEVELS
+                else "project.view"
+            )
+            try:
+                _on_document_thread(
+                    document_thread_dispatch, lambda: authorizer(permission)
+                )
+            except PermissionError as exc:
+                return finalize(
+                    tool_failure(
+                        tool_name,
+                        "RBAC_DENIED",
+                        "permission",
+                        str(exc),
+                        requested={"arguments_json": arguments_json},
+                        observed={"required_permission": permission},
+                    )
+                )
         args, argument_error = _parse_arguments(arguments_json)
         if argument_error:
             args = {}
@@ -1909,6 +2066,39 @@ def make_provider_tool_runner(
                 )
             )
         assert args is not None
+        try:
+            enforce_provider_tool(
+                managed_policy or load_managed_policy(),
+                tool_name,
+                online=provider_online,
+            )
+        except PermissionError as exc:
+            audit_error = ""
+            recorder = getattr(service, "record_audit_event", None)
+            if callable(recorder):
+                try:
+                    _on_document_thread(
+                        document_thread_dispatch,
+                        lambda: recorder(
+                            category="policy",
+                            action="provider_tool",
+                            outcome="blocked",
+                            actor_type="ai_provider",
+                            details={"tool_name": tool_name, "reason": "managed_policy"},
+                        ),
+                    )
+                except Exception as audit_exc:
+                    audit_error = f" Audit recording also failed: {audit_exc}"
+            return finalize(
+                tool_failure(
+                    tool_name,
+                    "MANAGED_POLICY_DENIED",
+                    "permission",
+                    str(exc) + audit_error,
+                    requested=args,
+                    observed={"provider_online": provider_online},
+                )
+            )
         try:
             tool.spec.validate_arguments(args)
         except ToolArgumentValidationError as exc:
@@ -1968,6 +2158,11 @@ def make_provider_tool_runner(
             review_context = _on_document_thread(
                 document_thread_dispatch,
                 lambda: _context_for_provider(service, session_trigger),
+            )
+            review_context = _apply_managed_outbound_policy(
+                review_context,
+                managed_policy or load_managed_policy(),
+                online=provider_online,
             )
             _emit(
                 progress_callback,
@@ -2161,26 +2356,26 @@ def make_provider_tool_runner(
         _consume_context_view_attachment(
             service, completed, document_thread_dispatch
         )
-        if not isinstance(turn_surface, dict):
+        if not isinstance(authorized_surface, dict):
             return completed
 
         live_surface = dict(completed.get("provider_tool_surface") or {})
         expected_tuple = (
-            str(turn_surface.get("workbench") or ""),
-            str(turn_surface.get("engine") or ""),
-            str(turn_surface.get("surface_id") or ""),
+            str(authorized_surface.get("workbench") or ""),
+            str(authorized_surface.get("engine") or ""),
+            str(authorized_surface.get("surface_id") or ""),
         )
         live_tuple = (
             str(live_surface.get("workbench") or ""),
             str(live_surface.get("engine") or ""),
             str(live_surface.get("surface_id") or ""),
         )
-        completed["provider_tool_surface"] = dict(turn_surface)
-        completed["provider_tool_schemas"] = json.loads(json.dumps(frozen_schemas))
-        completed["workbench"] = str(turn_surface.get("workbench") or "") or None
-        if frozen_modeling_surface:
+        completed["provider_tool_surface"] = dict(authorized_surface)
+        completed["provider_tool_schemas"] = json.loads(json.dumps(authorized_schemas))
+        completed["workbench"] = str(authorized_surface.get("workbench") or "") or None
+        if authorized_modeling_surface:
             completed["modeling_surface"] = json.loads(
-                json.dumps(frozen_modeling_surface)
+                json.dumps(authorized_modeling_surface)
             )
         if live_tuple != expected_tuple:
             # Never inject the next workbench/domain into an in-flight turn.
@@ -2225,6 +2420,150 @@ def make_provider_tool_runner(
     return run
 
 
+def _acceptance_callbacks(service, dispatch, scope):
+    def save_copy(path: Path) -> None:
+        def action():
+            import FreeCAD as App
+            doc = service._active_document()
+            if doc is None:
+                raise RuntimeError("The active CAD document is not available.")
+            canonical_name = str(getattr(doc, "FileName", "") or "")
+            from VibeCADSaveBoundary import internal_document_save
+            with internal_document_save():
+                doc.saveCopy(str(path))
+            if canonical_name and str(getattr(doc, "FileName", "") or "") != canonical_name:
+                doc.FileName = canonical_name
+            if App.ActiveDocument is not doc:
+                App.setActiveDocument(doc.Name)
+        _on_document_thread(dispatch, action)
+
+    def restore_live(_path: Path) -> None:
+        def action():
+            doc = service._active_document()
+            if doc is None:
+                raise RuntimeError("The active CAD document is not available.")
+            doc.restore()
+            doc.recompute()
+        _on_document_thread(dispatch, action)
+
+    def validate_document(path: Path) -> dict[str, Any]:
+        from VibeCADDocumentValidator import validate_saved_document
+        return validate_saved_document(path)
+
+    def write_metadata(revision_id: str | None) -> None:
+        VibeCADProjectStore.write_accepted_revision_metadata(
+            scope["manifest_path"], str(scope["project_id"]), revision_id
+        )
+
+    return save_copy, restore_live, validate_document, write_metadata
+
+
+def restore_accepted_revision(
+    service,
+    revision_id: str,
+    *,
+    document_thread_dispatch=None,
+) -> dict[str, Any]:
+    """Restore one verified accepted revision from a non-document worker."""
+    clean_revision = str(revision_id or "").strip().lower()
+    if not clean_revision:
+        raise ValueError("Select an accepted revision to restore.")
+    authorizer = getattr(service, "authorize", None)
+    if callable(authorizer):
+        _on_document_thread(
+            document_thread_dispatch, lambda: authorizer("revision.restore")
+        )
+    scope = _on_document_thread(
+        document_thread_dispatch, service.project_scope_snapshot
+    )
+    document = scope.get("document") or {}
+    canonical_path = str(document.get("file_path") or "").strip()
+    if not canonical_path:
+        raise RuntimeError("Save the active CAD document before restoring a revision.")
+    coordinator = VibeCADAcceptanceCoordinator(
+        scope["root"], str(scope["project_id"])
+    )
+    callbacks = _acceptance_callbacks(
+        service, document_thread_dispatch, scope
+    )
+    return coordinator.restore_revision(
+        clean_revision,
+        canonical_path,
+        save_copy=callbacks[0],
+        validate_document=callbacks[2],
+        restore_live=callbacks[1],
+        write_metadata=callbacks[3],
+    )
+
+
+def _mutating_trace(tool_trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in tool_trace if item.get("safety") in MUTATING_SAFETY_LEVELS]
+
+
+def _mutation_has_design_brief_update(traces: list[dict[str, Any]]) -> bool:
+    cad_mutations = [
+        item for item in traces if item.get("tool_name") != "core.update_design_brief"
+    ]
+    if not cad_mutations:
+        return True
+    return any(
+        item.get("tool_name") == "core.update_design_brief" and item.get("ok")
+        for item in traces
+    )
+
+
+def _changed_objects(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    changed: list[dict[str, Any]] = []
+    keys = {
+        "created_objects": "created",
+        "changed_objects": "modified",
+        "deleted_objects": "deleted",
+        "created": "created",
+        "modified": "modified",
+        "deleted": "deleted",
+        "removed": "deleted",
+    }
+    for trace in traces:
+        result = trace.get("result") if isinstance(trace.get("result"), dict) else {}
+        for key in ("state_change", "document_delta"):
+            value = result.get(key)
+            if isinstance(value, dict):
+                for source, category in keys.items():
+                    items = value.get(source)
+                    if not isinstance(items, (list, tuple)):
+                        continue
+                    for item in items:
+                        if isinstance(item, dict):
+                            name = item.get("name")
+                            if name is None and isinstance(item.get("after"), dict):
+                                name = item["after"].get("name")
+                            identity = str(name or item)
+                        else:
+                            identity = str(item)
+                        changed.append({"object": identity, "change": category})
+    return changed
+
+
+def _reactivate_scope_document(service: VibeCADService, scope: dict[str, Any]) -> None:
+    """Restore the accepted live document identity after file-copy operations."""
+    import FreeCAD as App
+
+    document = scope.get("document") if isinstance(scope.get("document"), dict) else {}
+    expected_name = str(document.get("document") or "")
+    expected_file = str(document.get("file_path") or "")
+    target = App.getDocument(expected_name) if expected_name in App.listDocuments() else None
+    if target is None:
+        for candidate in App.listDocuments().values():
+            if str(getattr(candidate, "FileName", "") or "") == expected_file:
+                target = candidate
+                break
+    if target is None:
+        raise RuntimeError("The accepted live CAD document identity was lost during promotion.")
+    if expected_file and str(getattr(target, "FileName", "") or "") != expected_file:
+        target.FileName = expected_file
+    App.setActiveDocument(target.Name)
+
+
 def _run_session_turn(
     prompt: str,
     *,
@@ -2235,6 +2574,7 @@ def _run_session_turn(
     cancellation_check: CancellationCheck | None,
     steering_check: SteeringCheck | None,
     question_callback: QuestionCallback | None,
+    candidate_decision_callback: CandidateDecisionCallback | None,
     session_trigger: dict[str, Any] | None,
     persist_input_as_user: bool,
     prompt_section: str,
@@ -2243,10 +2583,16 @@ def _run_session_turn(
     clean_prompt = str(prompt or "").strip()
     if not clean_prompt:
         raise ValueError("Prompt cannot be empty.")
+    _emit_run_state(progress_callback, "Understanding")
     active_service = service or _on_document_thread(
         document_thread_dispatch,
         get_service,
     )
+    authorizer = getattr(active_service, "authorize", None)
+    if callable(authorizer):
+        _on_document_thread(
+            document_thread_dispatch, lambda: authorizer("ai.use")
+        )
     persistence = _on_document_thread(
         document_thread_dispatch,
         active_service.document_persistence_state,
@@ -2257,6 +2603,11 @@ def _run_session_turn(
                 persistence.get("message")
                 or "Save the active document to enable VibeCAD."
             )
+        )
+    router = getattr(active_service, "route_modeling_strategy", None)
+    if callable(router):
+        _on_document_thread(
+            document_thread_dispatch, lambda: router(clean_prompt)
         )
     selected_engine = _prime_modeling_engine_for_session(
         active_service,
@@ -2319,23 +2670,25 @@ def _run_session_turn(
             dispatch=document_thread_dispatch,
         )
         turn_conversation_id = str(recorded.get("conversation_id") or "") or None
+    _emit_run_state(progress_callback, "Inspecting design")
     _emit(progress_callback, {"event": "context_build_started"})
     context = _on_document_thread(
         document_thread_dispatch,
         lambda: _context_for_provider(active_service, session_trigger),
     )
-    _consume_context_view_attachment(
-        active_service, context, document_thread_dispatch
+    scope = _on_document_thread(
+        document_thread_dispatch, active_service.project_scope_snapshot
     )
+    coordinator = VibeCADAcceptanceCoordinator(scope["root"], str(scope["project_id"]))
+    save_copy, restore_live, validate_document, write_metadata = _acceptance_callbacks(
+        active_service, document_thread_dispatch, scope
+    )
+    coordinator.recover_incomplete(
+        restore_live=restore_live,
+        write_metadata=write_metadata,
+    )
+    prepared_acceptance = coordinator.prepare(persistence["file_path"], save_copy)
     tool_trace: list[dict[str, Any]] = []
-    _emit(
-        progress_callback,
-        {
-            "event": "context_build_completed",
-            "workbench": context.get("workbench"),
-            "provider_tool_count": len(context.get("provider_tool_schemas") or []),
-        },
-    )
     active_provider = provider or _on_document_thread(
         document_thread_dispatch,
         lambda: choose_provider(
@@ -2344,6 +2697,38 @@ def _run_session_turn(
         ),
     )
     provider_name = active_provider.__class__.__name__
+    managed_policy = load_managed_policy()
+    provider_online = not isinstance(active_provider, OfflineProvider)
+    context = _apply_managed_outbound_policy(
+        context,
+        managed_policy,
+        online=provider_online,
+    )
+    policy_context = context.get("managed_policy")
+    if isinstance(policy_context, dict):
+        _on_document_thread(
+            document_thread_dispatch,
+            lambda: active_service.record_audit_event(
+                category="data_access",
+                action="prepare_provider_context",
+                outcome="filtered",
+                actor_type="ai_provider",
+                details=dict(policy_context),
+            ),
+        )
+    _consume_context_view_attachment(
+        active_service, context, document_thread_dispatch
+    )
+    _emit(
+        progress_callback,
+        {
+            "event": "context_build_completed",
+            "workbench": context.get("workbench"),
+            "provider_tool_count": len(context.get("provider_tool_schemas") or []),
+            "managed_policy": context.get("managed_policy"),
+        },
+    )
+    _emit_run_state(progress_callback, "Planning")
     tool_runner = make_provider_tool_runner(
         active_service,
         tool_trace=tool_trace,
@@ -2369,11 +2754,14 @@ def _run_session_turn(
             if isinstance(context.get("modeling_surface"), dict)
             else None
         ),
+        managed_policy=managed_policy,
+        provider_online=provider_online,
     )
     _emit(
         progress_callback,
         {"event": "provider_turn_started", "provider": provider_name, "turn": 1},
     )
+    _emit_run_state(progress_callback, "Creating preview")
     try:
         result = _run_provider(
             active_provider,
@@ -2388,15 +2776,169 @@ def _run_session_turn(
             progress_callback,
         )
         final_output = str(result.final_output or "").strip()
+        mutation_trace = _mutating_trace(tool_trace)
+        failed_mutations = [item for item in mutation_trace if not item.get("ok")]
+        if failed_mutations:
+            coordinator.reject(
+                prepared_acceptance,
+                restore_live=restore_live,
+                write_metadata=write_metadata,
+                reason="A mutating tool failed during the provider turn.",
+            )
+            raise ProviderUnavailable("A CAD mutation failed. The accepted revision was restored.")
+        if not _mutation_has_design_brief_update(mutation_trace):
+            coordinator.reject(
+                prepared_acceptance,
+                restore_live=restore_live,
+                write_metadata=write_metadata,
+                reason="The CAD mutation did not update its durable design brief.",
+            )
+            raise ProviderUnavailable(
+                "The CAD mutation was not accepted because its design brief was not updated."
+            )
+        decision_metadata: dict[str, Any]
+        if mutation_trace:
+            document_revision = _on_document_thread(
+                document_thread_dispatch, active_service.structural_document_revision
+            )
+            design_brief_revision = str(
+                _on_document_thread(
+                    document_thread_dispatch, active_service.design_brief
+                ).get("revision")
+                or ""
+            )
+            planned_acceptance_mode = (
+                "human" if candidate_decision_callback is not None else "automatic"
+            )
+
+            def revision_factory(saved_validation):
+                return create_revision_record(
+                    project_id=str(scope["project_id"]),
+                    parent_revision=prepared_acceptance.prior_head,
+                    user_request=clean_prompt,
+                    interpreted_intent=final_output or "Apply the requested validated CAD changes.",
+                    assumptions=[],
+                    plan=[{"tool": item.get("tool_name"), "arguments": item.get("arguments", {})} for item in mutation_trace],
+                    tool_operations=mutation_trace,
+                    changed_objects=_changed_objects(mutation_trace),
+                    validation_results=[dict(saved_validation)],
+                    provider=provider_name,
+                    model=str(getattr(active_provider, "model", "") or "unspecified"),
+                    timestamp=now_iso(),
+                    generated_source=None,
+                    preview_image=None,
+                    rollback={
+                        "available": True,
+                        "schema": "vibecad-rollback-artifact-v1",
+                        "acceptance_id": prepared_acceptance.acceptance_id,
+                        "acceptance_mode": planned_acceptance_mode,
+                    },
+                    transaction_id=prepared_acceptance.acceptance_id,
+                    document_revision=document_revision,
+                    design_brief_revision=design_brief_revision,
+                )
+
+            _emit_run_state(progress_callback, "Validating")
+            review_payload = coordinator.validate_candidate(
+                prepared_acceptance,
+                revision_factory,
+                save_copy=save_copy,
+                validate_document=validate_document,
+                restore_live=restore_live,
+                write_metadata=write_metadata,
+            )
+            try:
+                decision, acceptance_mode = _candidate_decision(
+                    candidate_decision_callback,
+                    review_payload,
+                )
+            except Exception as exc:
+                coordinator.reject(
+                    prepared_acceptance,
+                    restore_live=restore_live,
+                    write_metadata=write_metadata,
+                    reason=f"The candidate review failed: {exc}",
+                )
+                _on_document_thread(
+                    document_thread_dispatch,
+                    lambda: _reactivate_scope_document(active_service, scope),
+                )
+                raise
+            stopped_during_review = bool(
+                candidate_decision_callback is not None
+                and cancellation_check is not None
+                and cancellation_check()
+            )
+            if stopped_during_review:
+                decision = "reject"
+            decision_metadata = {
+                "decision": decision,
+                "mode": acceptance_mode,
+                "acceptance_id": str(review_payload.get("acceptance_id") or ""),
+                "candidate_sha256": str(review_payload.get("candidate_sha256") or ""),
+                "revision_id": None,
+            }
+            if decision == "reject":
+                reason = (
+                    "The user stopped the run during candidate review."
+                    if stopped_during_review
+                    else "The user rejected the validated candidate preview."
+                )
+                coordinator.reject(
+                    prepared_acceptance,
+                    restore_live=restore_live,
+                    write_metadata=write_metadata,
+                    reason=reason,
+                    decision_mode="human",
+                )
+                _on_document_thread(
+                    document_thread_dispatch,
+                    lambda: _reactivate_scope_document(active_service, scope),
+                )
+            else:
+                _emit_run_state(progress_callback, "Applying revision")
+                accepted = coordinator.accept_validated_candidate(
+                    prepared_acceptance,
+                    restore_live=restore_live,
+                    write_metadata=write_metadata,
+                    acceptance_mode=acceptance_mode,
+                )
+                accepted_revision = accepted.get("revision")
+                if isinstance(accepted_revision, Mapping):
+                    decision_metadata["revision_id"] = str(
+                        accepted_revision.get("revision_id") or ""
+                    ) or None
+                _on_document_thread(
+                    document_thread_dispatch,
+                    lambda: _reactivate_scope_document(active_service, scope),
+                )
+            _emit(
+                progress_callback,
+                {
+                    "event": "candidate_decision_recorded",
+                    **decision_metadata,
+                },
+            )
+        else:
+            _emit_run_state(progress_callback, "Validating")
+            _emit_run_state(progress_callback, "Applying revision")
+            coordinator.complete_without_mutation(prepared_acceptance)
+            decision_metadata = {
+                "decision": "no_mutation",
+                "mode": "automatic",
+                "acceptance_id": prepared_acceptance.acceptance_id,
+                "revision_id": None,
+            }
         if final_output:
             _persist_session_conversation_turn(
                 active_service,
                 "assistant",
                 final_output,
                 provider=provider_name,
-                metadata={"session_trigger": session_trigger}
-                if session_trigger
-                else None,
+                metadata={
+                    **({"session_trigger": session_trigger} if session_trigger else {}),
+                    "candidate_decision": dict(decision_metadata),
+                },
                 conversation_id=turn_conversation_id,
                 dispatch=document_thread_dispatch,
             )
@@ -2413,6 +2955,7 @@ def _run_session_turn(
             document_thread_dispatch,
             lambda: _context_for_provider(active_service, session_trigger),
         )
+        final_context["candidate_decision"] = dict(decision_metadata)
         _emit(
             progress_callback,
             {
@@ -2422,6 +2965,7 @@ def _run_session_turn(
                 "tool_count": len(tool_trace),
             },
         )
+        _emit_run_state(progress_callback, "Complete")
         return VibeCADResponse(
             provider=provider_name,
             final_output=final_output,
@@ -2429,6 +2973,23 @@ def _run_session_turn(
             tool_trace=tool_trace,
         )
     except ProviderUnavailable as exc:
+        journal_state = ""
+        try:
+            journal_state = str(json.loads(prepared_acceptance.journal_path.read_text(encoding="utf-8")).get("state") or "")
+        except (OSError, ValueError):
+            pass
+        if journal_state not in {
+            "rolled_back",
+            "rejected",
+            "accepted",
+            "no_mutation",
+        }:
+            coordinator.reject(
+                prepared_acceptance,
+                restore_live=restore_live,
+                write_metadata=write_metadata,
+                reason=str(exc),
+            )
         provider_error = str(exc)
         final_output = f"{provider_name} failed before returning a usable AI result: {provider_error}"
         _emit(
@@ -2464,6 +3025,7 @@ def run_prompt(
     steering_check: SteeringCheck | None = None,
     question_callback: QuestionCallback | None = None,
     document_thread_dispatch: DocumentThreadDispatch | None = None,
+    candidate_decision_callback: CandidateDecisionCallback | None = None,
 ) -> VibeCADResponse:
     return _run_session_turn(
         prompt,
@@ -2474,6 +3036,7 @@ def run_prompt(
         cancellation_check=cancellation_check,
         steering_check=steering_check,
         question_callback=question_callback,
+        candidate_decision_callback=candidate_decision_callback,
         session_trigger=None,
         persist_input_as_user=True,
         prompt_section="CURRENT_USER_MESSAGE",
@@ -2573,6 +3136,7 @@ def run_sketch_close_continuation(
     steering_check: SteeringCheck | None = None,
     question_callback: QuestionCallback | None = None,
     document_thread_dispatch: DocumentThreadDispatch | None = None,
+    candidate_decision_callback: CandidateDecisionCallback | None = None,
 ) -> VibeCADResponse:
     if not isinstance(event, dict):
         raise ValueError("Sketch-close continuation event must be an object.")
@@ -2629,6 +3193,7 @@ def run_sketch_close_continuation(
         cancellation_check=cancellation_check,
         steering_check=steering_check,
         question_callback=question_callback,
+        candidate_decision_callback=candidate_decision_callback,
         session_trigger=clean_event,
         persist_input_as_user=False,
         prompt_section="CURRENT_SESSION_EVENT",

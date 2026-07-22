@@ -3,25 +3,54 @@
 set(VibeCAD_Scripts
     Init.py
     InitGui.py
+    TestVibeCADProviderBenchmark.py
+    TestVibeCADOnboarding.py
+    TestVibeCADCandidateReview.py
+    TestVibeCADTier2Benchmark.py
+    TestVibeCADDrawingExport.py
+    VibeCADAcceptance.py
+    VibeCADAddonManagerPolicy.py
+    VibeCADAudit.py
+    VibeCADAuditCollector.py
+    VibeCADAuditReport.py
+    VibeCADDesignBrief.py
+    VibeCADExportGuard.py
     VibeCADAuth.py
     VibeCADBuild123d.py
+    VibeCADCapabilityRouter.py
     VibeCADCodex.py
     VibeCADCore.py
     VibeCADDebug.py
     VibeCADDesignReview.py
+    VibeCADDocumentValidator.py
     VibeCADEditState.py
+    VibeCADEnterpriseRuntime.py
     VibeCADGrid.py
+    VibeCADImageCalibration.py
+    VibeCADManufacturing.py
     VibeCADGeometry.py
     VibeCADGui.py
     VibeCADInspection.py
     VibeCADIntentMemory.py
     VibeCADIntentMemoryCompiler.py
+    VibeCADIdentity.py
+    VibeCADFederatedIdentity.py
+    VibeCADSAMLIdentity.py
+    VibeCADSaveBoundary.py
     VibeCADModelingSurface.py
+    VibeCADNetwork.py
+    VibeCADManagedPolicy.py
+    VibeCADOrganization.py
+    VibeCADOnboarding.py
+    VibeCADPolicyBundle.py
     VibeCADOpenSCAD.py
     VibeCADPreferences.py
     VibeCADPromptStarters.py
     VibeCADProvider.py
     VibeCADReferenceContracts.py
+    VibeCADRevision.py
+    VibeCADRevisionExport.py
+    VibeCADSCIM.py
     VibeCADProject.py
     VibeCADSession.py
     VibeCADScriptedEditor.py
@@ -30,6 +59,7 @@ set(VibeCAD_Scripts
     VibeCADScriptedPublication.py
     VibeCADTools.py
     VibeCADTransactions.py
+    VibeCADUpdate.py
     VibeCADVibeScriptDomains.py
     VibeCADVibeScriptDomainRuntime.py
     VibeCADVibeScriptDomainPublication.py

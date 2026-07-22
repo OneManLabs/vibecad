@@ -6,3 +6,7 @@ VibeCAD does not register a standalone workbench. Its application initializer
 registers panels and commands once, while the active workbench selects the
 exact modeling surface made available to the assistant.
 """
+
+from VibeCADExportGuard import refresh_export_guards
+
+refresh_export_guards(FreeCAD)

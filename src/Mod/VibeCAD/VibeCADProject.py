@@ -15,12 +15,20 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import time
 from typing import Any
 import uuid
 
 from VibeCADIntentMemory import DESIGN_DOCUMENT_NAME, read_memory, write_memory
+from VibeCADDesignBrief import (
+    apply_design_brief_update,
+    ensure_migrated_design_brief,
+    read_design_brief,
+    write_design_brief,
+)
+from VibeCADRevision import VibeCADRevisionStore
 
 
 PROJECT_SCHEMA = "vibecad-project-v2"
@@ -770,7 +778,29 @@ class VibeCADProjectStore:
 
     def context(self) -> dict[str, Any]:
         scope = self.project_scope()
-        manifest = self.save_manifest(self.load_manifest())
+        manifest_path = Path(str(scope["manifest_path"]))
+        manifest_exists = manifest_path.is_file()
+        manifest = self.load_manifest()
+        if not manifest_exists:
+            manifest = self.save_manifest(manifest)
+        else:
+            try:
+                stored = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise RuntimeError(
+                    f"VibeCAD project manifest could not be read from {manifest_path}: {exc}"
+                ) from exc
+            try:
+                stored_version = int(stored.get("version") or 0)
+            except (TypeError, ValueError):
+                stored_version = 0
+            needs_migration = (
+                not isinstance(stored, dict)
+                or stored_version != 2
+                or "modeling_engine" not in stored
+            )
+            if needs_migration:
+                manifest = self.save_manifest(manifest)
         return {
             "schema": "vibecad-project-context-v2",
             "project_id": manifest["project_id"],
@@ -784,6 +814,7 @@ class VibeCADProjectStore:
             "document": scope.get("document", {}),
             "documents": manifest.get("documents", {}),
             "modeling_engine": str(manifest.get("modeling_engine") or DEFAULT_MODELING_ENGINE),
+            "last_capability_route": dict(manifest.get("last_capability_route") or {}),
         }
 
     def design_document(self) -> dict[str, Any]:
@@ -806,6 +837,191 @@ class VibeCADProjectStore:
     def conversation_store(self) -> VibeCADConversationStore:
         root = Path(str(self.project_scope()["root"]))
         return VibeCADConversationStore(root)
+
+    def revision_store(self) -> VibeCADRevisionStore:
+        scope = self.project_scope()
+        return VibeCADRevisionStore(scope["root"], str(scope["project_id"]))
+
+    def revision_timeline(self) -> list[dict[str, Any]]:
+        """Return accepted revisions in append order for the product timeline."""
+        head = self.revision_store().head()
+        head_id = head.get("revision_id") if head else None
+        return [
+            {
+                "revision_id": record["revision_id"],
+                "parent_revision": record.get("parent_revision"),
+                "timestamp": record["timestamp"],
+                "user_request": record["user_request"],
+                "interpreted_intent": record["interpreted_intent"],
+                "changed_objects": record["changed_objects"],
+                "is_head": record["revision_id"] == head_id,
+            }
+            for record in self.revision_store().list_records()
+        ]
+
+    def compare_revisions(self, left_revision: str, right_revision: str) -> dict[str, Any]:
+        return self.revision_store().compare(left_revision, right_revision)
+
+    def export_revision_report(
+        self, target: str | Path, revision_ids: list[str] | None = None
+    ) -> dict[str, Any]:
+        from VibeCADRevisionExport import create_revision_report
+
+        return create_revision_report(
+            self.revision_store(), target, revision_ids=revision_ids
+        )
+
+    def create_revision_branch(
+        self, revision_id: str, target: str | Path
+    ) -> dict[str, Any]:
+        from VibeCADDesignBrief import brief_revision
+        from VibeCADIntentMemory import memory_revision
+        from VibeCADRevisionExport import (
+            create_revision_branch,
+            resolve_revision_project_snapshot,
+        )
+
+        destination = Path(target).expanduser().resolve()
+        target_project_id = hashlib.sha1(str(destination).encode("utf-8")).hexdigest()[:16]
+        target_root = project_root_for_document_file(destination)
+        if target_root.exists():
+            raise FileExistsError("The target branch project already exists.")
+        source_store = self.revision_store()
+        snapshot = resolve_revision_project_snapshot(source_store, revision_id)
+        result = create_revision_branch(
+            source_store,
+            revision_id,
+            destination,
+            target_project_id=target_project_id,
+        )
+        lineage_path = Path(result["lineage_path"])
+        temporary_root = target_root.with_name(
+            f".{target_root.name}.{uuid.uuid4().hex}.tmp"
+        )
+        project_created = False
+        try:
+            shutil.copytree(snapshot, temporary_root, symlinks=True)
+            source_conversations = Path(str(self.project_scope()["root"])) / CONVERSATIONS_DIR_NAME
+            if source_conversations.is_dir():
+                shutil.copytree(
+                    source_conversations,
+                    temporary_root / CONVERSATIONS_DIR_NAME,
+                    symlinks=True,
+                )
+
+            manifest_path = temporary_root / "project.vibecad.json"
+            if manifest_path.is_file():
+                manifest = _read_json_object(manifest_path, "branch project manifest")
+            else:
+                manifest = {}
+            manifest.update(
+                {
+                    "schema": PROJECT_SCHEMA,
+                    "version": 2,
+                    "project_id": target_project_id,
+                    "title": destination.stem,
+                    "accepted_revision": None,
+                    "branch_origin": {
+                        "source_project_id": source_store.project_id,
+                        "source_revision": result["source_revision"],
+                        "source_document_sha256": result["source_document_sha256"],
+                    },
+                    "documents": {
+                        "active": {
+                            "document": destination.stem,
+                            "label": destination.stem,
+                            "file_path": str(destination),
+                            "saved": True,
+                        }
+                    },
+                    "updated_at": now_iso(),
+                }
+            )
+            _atomic_write_json(manifest_path, manifest)
+
+            brief_path = temporary_root / "design-brief.json"
+            if brief_path.is_file():
+                brief = _read_json_object(brief_path, "branch design brief")
+                brief["project_id"] = target_project_id
+                brief["revision"] = brief_revision(brief)
+                _atomic_write_json(brief_path, brief)
+
+            memory_path = temporary_root / "intent-memory.json"
+            if memory_path.is_file():
+                memory = _read_json_object(memory_path, "branch intent memory")
+                memory["project_id"] = target_project_id
+                memory["revision"] = memory_revision(memory)
+                _atomic_write_json(memory_path, memory)
+
+            target_root.parent.mkdir(parents=True, exist_ok=True)
+            temporary_root.rename(target_root)
+            project_created = True
+        except Exception:
+            if project_created and target_root.is_dir():
+                shutil.rmtree(target_root)
+            destination.unlink(missing_ok=True)
+            lineage_path.unlink(missing_ok=True)
+            raise
+        finally:
+            if temporary_root.is_dir():
+                shutil.rmtree(temporary_root)
+        return {
+            **result,
+            "target_project_id": target_project_id,
+            "project_root": str(target_root),
+            "project_manifest": str(target_root / "project.vibecad.json"),
+            "conversation_migrated": (target_root / CONVERSATIONS_DIR_NAME).is_dir(),
+            "design_brief_migrated": (target_root / "design-brief.json").is_file(),
+        }
+
+    def design_brief(self) -> dict[str, Any]:
+        scope = self.project_scope()
+        return read_design_brief(
+            scope["root"], str(scope["project_id"]), legacy_memory=self.intent_memory()
+        )
+
+    def ensure_design_brief(self) -> dict[str, Any]:
+        scope = self.project_scope()
+        return ensure_migrated_design_brief(
+            scope["root"], str(scope["project_id"]), self.intent_memory()
+        )
+
+    def write_design_brief(self, brief: dict[str, Any]) -> dict[str, Any]:
+        scope = self.project_scope()
+        return write_design_brief(
+            scope["root"], brief, project_id=str(scope["project_id"])
+        )
+
+    def apply_design_brief_update(self, update: dict[str, Any]) -> dict[str, Any]:
+        scope = self.project_scope()
+        current = self.ensure_design_brief()
+        changed = apply_design_brief_update(
+            current, update, project_id=str(scope["project_id"])
+        )
+        return write_design_brief(
+            scope["root"], changed, project_id=str(scope["project_id"])
+        )
+
+    @staticmethod
+    def write_accepted_revision_metadata(
+        manifest_path: str | Path,
+        project_id: str,
+        revision_id: str | None,
+    ) -> None:
+        """Atomically set the accepted head without access to the live document."""
+        path = Path(manifest_path)
+        if path.is_file():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise RuntimeError(f"VibeCAD project manifest could not be read: {exc}") from exc
+        else:
+            raise RuntimeError("The VibeCAD project manifest does not exist.")
+        if payload.get("schema") != PROJECT_SCHEMA or str(payload.get("project_id")) != str(project_id):
+            raise RuntimeError("The VibeCAD project manifest identity is invalid.")
+        payload["accepted_revision"] = revision_id
+        payload["updated_at"] = now_iso()
+        _atomic_write_json(path, payload)
 
     def update_summary(self, *, title: str = "", summary: str = "") -> dict[str, Any]:
         """Update the human-facing title/summary for the project."""
@@ -875,6 +1091,14 @@ class VibeCADProjectStore:
             "updated_at": saved.get("updated_at"),
         }
 
+    def set_capability_route(self, route: dict[str, Any]) -> dict[str, Any]:
+        if route.get("schema") != "vibecad-capability-route-v1" or not route.get("route_id"):
+            raise RuntimeError("The capability route schema is invalid.")
+        manifest = self.load_manifest()
+        manifest["last_capability_route"] = dict(route)
+        saved = self.save_manifest(manifest)
+        return dict(saved["last_capability_route"])
+
     def _default_manifest(self, scope: dict[str, Any]) -> dict[str, Any]:
         return {
             "schema": PROJECT_SCHEMA,
@@ -883,9 +1107,12 @@ class VibeCADProjectStore:
             "title": scope["title"],
             "summary": "",
             "modeling_engine": DEFAULT_MODELING_ENGINE,
+            "last_capability_route": {},
             "created_at": now_iso(),
             "updated_at": now_iso(),
             "documents": {"active": scope.get("document", {})},
+            "accepted_revision": None,
+            "branch_origin": {},
         }
 
     def _merge_manifest_defaults(

@@ -97,6 +97,7 @@ SPREADSHEET_PACK_TOOL_NAMES: tuple[str, ...] = (
     "spreadsheet.create_sheet",
     "spreadsheet.set_cells",
     "spreadsheet.read_sheet",
+    "spreadsheet.bind_parameter",
 )
 
 SURFACE_PACK_TOOL_NAMES: tuple[str, ...] = (
@@ -114,6 +115,9 @@ ASSEMBLY_PACK_TOOL_NAMES: tuple[str, ...] = (
     "assembly.ground_component",
     "assembly.create_joint",
     "assembly.solve",
+    "assembly.extract_bom",
+    "assembly.analyze_interference",
+    "assembly.replace_component",
 )
 
 BIM_PACK_TOOL_NAMES: tuple[str, ...] = (
@@ -130,6 +134,7 @@ TECHDRAW_PACK_TOOL_NAMES: tuple[str, ...] = (
     "techdraw.add_view",
     "techdraw.add_dimension",
     "techdraw.add_annotation",
+    "project.export_drawing",
 )
 
 MATERIAL_PACK_TOOL_NAMES: tuple[str, ...] = (
@@ -163,6 +168,7 @@ CAM_PACK_TOOL_NAMES: tuple[str, ...] = (
     "cam.create_job",
     "cam.add_tool",
     "cam.add_operation",
+    "cam.postprocess",
 )
 
 POINTS_PACK_TOOL_NAMES: tuple[str, ...] = ("points.list_clouds",)
@@ -235,8 +241,9 @@ WORKBENCH_TOOL_PACKS: dict[str, WorkbenchToolPack] = {
         "Depths are absolute Z and face references must be exact; derive both "
         "from core.inspect on the active document or ask the human to confirm "
         "them. An operation reporting an empty toolpath cut nothing; fix "
-        "depths or faces before continuing. G-code "
-        "postprocessing to files is left to the user in the FreeCAD GUI.",
+        "depths or faces before continuing. Post-process only after the "
+        "native path and collision analysis pass; generic output still needs "
+        "machine-limit and work-offset verification.",
         ("CAM_",),
         ("Path::FeaturePython",),
         ({"name": "job_container", "object_type": "App::DocumentObjectGroup"},),

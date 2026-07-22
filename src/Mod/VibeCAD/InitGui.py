@@ -60,6 +60,15 @@ except Exception as exc:
 
 
 try:
+    import AddonManager as _AddonManager
+    from VibeCADAddonManagerPolicy import install_addon_manager_policy_guard
+
+    install_addon_manager_policy_guard(_AddonManager)
+except Exception as exc:
+    _warn(f"VibeCAD Addon Manager policy adapter failed: {exc}")
+
+
+try:
     from PySide import QtCore
 
     import VibeCADGui

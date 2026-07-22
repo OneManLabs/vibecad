@@ -28,6 +28,7 @@ from VibeCADCore import get_service
 from VibeCADDebug import list_provider_request_captures
 from VibeCADEditState import active_edit_object, active_edit_state
 from VibeCADProject import DEFAULT_MODELING_ENGINE
+from VibeCADOnboarding import START_CHOICES, choose_start, load_state, start_choice
 from VibeCADPromptStarters import (
     BUILTIN_PROMPT_STARTERS,
     CATEGORY_ORDER,
@@ -36,6 +37,7 @@ from VibeCADPromptStarters import (
 from VibeCADSession import (
     _format_document_delta,
     rebuild_intent_memory,
+    restore_accepted_revision,
     run_prompt,
     run_sketch_close_continuation,
 )
@@ -64,6 +66,8 @@ _gui_document_observer = None
 _context_debug_startup_scheduled = False
 _registered_assistant_widget = None
 _registered_context_debug_widget = None
+_update_help_action = None
+_audit_report_action = None
 _document_save_conversations: dict[str, dict[str, Any]] = {}
 _document_save_references: dict[str, dict[str, Any]] = {}
 _pending_question_request: list[dict[str, Any]] = []
@@ -71,10 +75,23 @@ _conversation_persist_queue: queue.Queue[tuple[Any, dict[str, Any]]] = queue.Que
 _conversation_persist_thread: threading.Thread | None = None
 _conversation_persist_lock = threading.RLock()
 _assistant_document_refresh_scheduled = False
+_onboarding_dialog = None
+_onboarding_scheduled = False
 
 _IDLE_STATUS_TEXT = "Ready. Tell VibeCAD what to make or change."
 _PANEL_SPLITTER_PARAMETER = "PanelSplitterState"
 _PREFERENCES_PATH = "User parameter:BaseApp/Preferences/VibeCAD"
+
+#: Stable, user-facing phases emitted by the transactional assistant loop.
+ASSISTANT_RUN_STATES = (
+    "Understanding",
+    "Inspecting design",
+    "Planning",
+    "Creating preview",
+    "Validating",
+    "Applying revision",
+    "Complete",
+)
 
 
 class _AssistantRunController:
@@ -150,11 +167,33 @@ class _QuestionWaiter:
         self.completed.set()
 
 
+class _CandidateDecisionWaiter:
+    """One thread-safe human decision for a validated CAD candidate."""
+
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = dict(payload)
+        self.completed = threading.Event()
+        self._lock = threading.Lock()
+        self.decision = ""
+
+    def finish(self, decision: str) -> bool:
+        clean = str(decision or "").strip().lower()
+        if clean not in {"accept", "reject"}:
+            raise ValueError("A candidate decision must be 'accept' or 'reject'.")
+        with self._lock:
+            if self.completed.is_set():
+                return False
+            self.decision = clean
+            self.completed.set()
+            return True
+
+
 _assistant_run_controller = _AssistantRunController()
 _assistant_run_thread: threading.Thread | None = None
 _intent_memory_rebuild_thread: threading.Thread | None = None
 _document_thread_invoker: Any | None = None
 _pending_question_waiter: _QuestionWaiter | None = None
+_pending_candidate_decision_waiter: _CandidateDecisionWaiter | None = None
 
 
 def _is_intent_memory_rebuild_active() -> bool:
@@ -1558,6 +1597,136 @@ def _request_user_answers(
     return answers
 
 
+def _candidate_review_active() -> bool:
+    waiter = _pending_candidate_decision_waiter
+    return waiter is not None and not waiter.completed.is_set()
+
+
+def _candidate_review_text(payload: dict[str, Any]) -> str:
+    validation = payload.get("validation")
+    if isinstance(validation, dict):
+        warnings = validation.get("warnings")
+        warning_count = len(warnings) if isinstance(warnings, list) else 0
+    else:
+        warning_count = 0
+    if warning_count:
+        return (
+            "The preview passed required validation with "
+            f"{warning_count} warning(s). Accept it or reject it."
+        )
+    return "The preview passed validation. Accept it or reject it."
+
+
+def _show_candidate_review(
+    payload: dict[str, Any],
+    waiter: _CandidateDecisionWaiter,
+) -> None:
+    """Show one validated candidate without changing the accepted CAD state."""
+    global _pending_candidate_decision_waiter
+    active = _pending_candidate_decision_waiter
+    if active is not None and not active.completed.is_set():
+        raise RuntimeError("Another validated CAD preview is already awaiting review.")
+    dock = _find_dock()
+    if dock is None:
+        raise RuntimeError("The VibeCAD panel is not open for candidate review.")
+    _pending_candidate_decision_waiter = waiter
+    panel = _find_child("QWidget", "VibeCandidateReview", dock)
+    summary = _find_child("QLabel", "VibeCandidateReviewSummary", dock)
+    accept_button = _find_child("QPushButton", "VibeAcceptRevision", dock)
+    reject_button = _find_child("QPushButton", "VibeRejectPreview", dock)
+    if panel is None or accept_button is None or reject_button is None:
+        _pending_candidate_decision_waiter = None
+        raise RuntimeError("The VibeCAD candidate review controls are unavailable.")
+    panel.setProperty("VibeAcceptanceId", str(payload.get("acceptance_id") or ""))
+    panel.setProperty("VibeCandidateSha256", str(payload.get("candidate_sha256") or ""))
+    if summary is not None:
+        summary.setText(_candidate_review_text(payload))
+    panel.setVisible(True)
+    accept_button.setEnabled(True)
+    reject_button.setEnabled(True)
+    accept_button.setFocus()
+    _render_assistant_run_state(
+        dock,
+        text="Review the validated preview before it becomes an accepted revision.",
+    )
+
+
+def _resolve_candidate_review(
+    decision: str,
+    *,
+    expected_waiter: _CandidateDecisionWaiter | None = None,
+) -> bool:
+    """Resolve the visible review exactly once and release the worker."""
+    global _pending_candidate_decision_waiter
+    clean = str(decision or "").strip().lower()
+    if clean not in {"accept", "reject"}:
+        raise ValueError("A candidate decision must be 'accept' or 'reject'.")
+    waiter = _pending_candidate_decision_waiter
+    if waiter is None or (expected_waiter is not None and waiter is not expected_waiter):
+        return False
+    _pending_candidate_decision_waiter = None
+    dock = _find_dock()
+    panel = _find_child("QWidget", "VibeCandidateReview", dock)
+    accept_button = _find_child("QPushButton", "VibeAcceptRevision", dock)
+    reject_button = _find_child("QPushButton", "VibeRejectPreview", dock)
+    if accept_button is not None:
+        accept_button.setEnabled(False)
+    if reject_button is not None:
+        reject_button.setEnabled(False)
+    if panel is not None:
+        panel.setVisible(False)
+        panel.setProperty("VibeAcceptanceId", "")
+        panel.setProperty("VibeCandidateSha256", "")
+    resolved = waiter.finish(clean)
+    if resolved and dock is not None:
+        _set_status_line(
+            "Applying the validated revision..."
+            if clean == "accept"
+            else "Preview rejected. Restoring the accepted design...",
+            dock=dock,
+        )
+    return resolved
+
+
+def _accept_candidate_from_panel() -> None:
+    if _resolve_candidate_review("accept"):
+        _append_conversation(
+            "User",
+            "Accept revision.",
+            persist=True,
+            metadata={"source": "candidate_review", "decision": "accept"},
+        )
+
+
+def _reject_candidate_from_panel() -> None:
+    if _resolve_candidate_review("reject"):
+        _append_conversation(
+            "User",
+            "Reject preview.",
+            persist=True,
+            metadata={"source": "candidate_review", "decision": "reject"},
+        )
+
+
+def _request_candidate_decision(
+    payload: dict[str, Any],
+    cancellation_check: Any,
+) -> str:
+    """Marshal candidate review to Qt and wait without blocking the UI thread."""
+    if cancellation_check():
+        return "reject"
+    waiter = _CandidateDecisionWaiter(payload)
+    _dispatch_to_document_thread(lambda: _show_candidate_review(payload, waiter))
+    while not waiter.completed.wait(0.1):
+        if cancellation_check():
+            _dispatch_to_document_thread(
+                lambda: _resolve_candidate_review(
+                    "reject", expected_waiter=waiter
+                )
+            )
+    return waiter.decision or "reject"
+
+
 # ---------------------------------------------------------------------------
 # Status + progress rendering
 # ---------------------------------------------------------------------------
@@ -1570,6 +1739,23 @@ def _set_status_line(text: str, *, dock: Any | None = None) -> None:
     clean = str(text or "").strip()
     label.setText(clean)
     label.setVisible(bool(clean) and clean != _IDLE_STATUS_TEXT)
+
+
+def _render_named_run_state(dock: Any, state: Any) -> bool:
+    """Render one stable assistant phase and expose it to tests and assistive tools."""
+    clean = str(state or "").strip()
+    if clean not in ASSISTANT_RUN_STATES:
+        _warn(f"VibeCAD ignored an unknown assistant run state: {clean or '<empty>'}.")
+        return False
+    if dock is not None:
+        dock.setProperty("VibeRunState", clean)
+    label = _find_child("QLabel", "VibeRunState", dock)
+    if label is not None:
+        label.setText(clean)
+        label.setVisible(True)
+        label.setAccessibleDescription(f"Current AI activity: {clean}.")
+    _set_status_line(clean, dock=dock)
+    return True
 
 
 #: Failure stages where the tool call was rejected before touching the document.
@@ -1809,6 +1995,9 @@ def _handle_progress_event(
     event: dict[str, Any],
 ) -> None:
     event_name = str(event.get("event") or "")
+    if event_name == "run_state_changed":
+        _render_named_run_state(dock, event.get("state"))
+        return
     if event_name in {
         "scripted_model_update_started",
         "scripted_model_update_finished",
@@ -1986,6 +2175,21 @@ def _refresh_reference_chips(dock: Any | None = None) -> None:
             lambda checked=False, rid=reference_id: _remove_reference_from_panel(rid)
         )
         layout.addWidget(chip)
+        scale_button = QtWidgets.QPushButton("Set scale", row)
+        scale_button.setObjectName(f"VibeReferenceScale_{reference_id}")
+        scale_button.setAccessibleName(f"Set scale for {name}")
+        calibration = entry.get("scale_calibration")
+        if isinstance(calibration, dict):
+            scale_button.setText("Scale set")
+            scale_button.setToolTip(
+                f"{calibration.get('millimetres_per_pixel', 0):.6g} mm per pixel. Change scale."
+            )
+        else:
+            scale_button.setToolTip("Add one known image length before using image dimensions.")
+        scale_button.clicked.connect(
+            lambda checked=False, rid=reference_id: _calibrate_reference_from_panel(rid)
+        )
+        layout.addWidget(scale_button)
     if images:
         layout.addStretch(1)
     row.setVisible(bool(images))
@@ -2003,6 +2207,61 @@ def _remove_reference_from_panel(reference_id: str) -> None:
         )
     else:
         _set_status_line(str(result.get("error", "Could not remove reference image.")))
+    _refresh_reference_chips()
+
+
+def _calibrate_reference_from_panel(reference_id: str) -> None:
+    try:
+        from PySide import QtWidgets
+    except Exception:
+        return
+    dock = _find_dock()
+    known_length, accepted = QtWidgets.QInputDialog.getDouble(
+        dock,
+        "Set Image Scale",
+        "Known length:",
+        10.0,
+        0.000001,
+        1000000.0,
+        4,
+    )
+    if not accepted:
+        return
+    unit, accepted = QtWidgets.QInputDialog.getItem(
+        dock,
+        "Set Image Scale",
+        "Unit:",
+        ["mm", "cm", "m", "in"],
+        0,
+        False,
+    )
+    if not accepted:
+        return
+    pixel_distance, accepted = QtWidgets.QInputDialog.getDouble(
+        dock,
+        "Set Image Scale",
+        "Pixel distance for the known length:",
+        100.0,
+        1.0,
+        1000000.0,
+        3,
+    )
+    if not accepted:
+        return
+    result = get_service().calibrate_reference_image(
+        reference_id,
+        known_length=known_length,
+        known_unit=str(unit),
+        pixel_distance=pixel_distance,
+    )
+    if not result.get("ok"):
+        _set_status_line(str(result.get("error") or "Could not set image scale."))
+        return
+    calibration = result["calibration"]
+    _set_status_line(
+        "Image scale set. Pixel-derived dimensions will remain labeled as estimates "
+        f"({calibration['millimetres_per_pixel']:.6g} mm per pixel)."
+    )
     _refresh_reference_chips()
 
 
@@ -2296,12 +2555,14 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
     if dock is None:
         return
     busy = _is_assistant_run_active()
+    reviewing = _candidate_review_active()
     persistence = _document_persistence_state()
     document_ready = bool(persistence.get("enabled"))
     pending_sketch = _sketch_close_continuation_controller.snapshot()
     dock.setProperty("VibeRunActive", busy)
     dock.setProperty("VibeCancelRequested", _is_assistant_cancel_requested())
     dock.setProperty("VibeDocumentReady", document_ready)
+    dock.setProperty("VibeCandidateReviewActive", reviewing)
 
     send_button = _find_child("QPushButton", "VibeSend", dock)
     stop_button = _find_child("QPushButton", "VibeStop", dock)
@@ -2313,9 +2574,18 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
     new_conversation = _find_child("QToolButton", "VibeNewConversation", dock)
     prompt_starters = _find_child("QToolButton", "VibePromptStarters", dock)
     engine_selector = _find_child("QComboBox", "VibeModelingEngine", dock)
+    revision_toggle = _find_child("QToolButton", "VibeRevisionToggle", dock)
+    revision_refresh = _find_child("QPushButton", "VibeRevisionRefresh", dock)
+    revision_compare = _find_child("QPushButton", "VibeRevisionCompare", dock)
+    revision_restore = _find_child("QPushButton", "VibeRevisionRestore", dock)
+    revision_report = _find_child("QPushButton", "VibeRevisionReport", dock)
+    revision_branch = _find_child("QPushButton", "VibeRevisionBranch", dock)
+    review_panel = _find_child("QWidget", "VibeCandidateReview", dock)
+    accept_revision = _find_child("QPushButton", "VibeAcceptRevision", dock)
+    reject_preview = _find_child("QPushButton", "VibeRejectPreview", dock)
 
     if send_button is not None:
-        send_button.setEnabled(busy or document_ready)
+        send_button.setEnabled((busy or document_ready) and not reviewing)
         send_button.setText("Steer" if busy else "Send")
     if stop_button is not None:
         stop_button.setEnabled(busy)
@@ -2333,9 +2603,27 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
         prompt_starters.setEnabled(document_ready and not busy)
     if engine_selector is not None:
         engine_selector.setEnabled(document_ready and not busy)
+    for revision_control in (
+        revision_toggle,
+        revision_refresh,
+        revision_compare,
+        revision_restore,
+        revision_report,
+        revision_branch,
+    ):
+        if revision_control is not None:
+            revision_control.setEnabled(document_ready and not busy)
+    if review_panel is not None:
+        review_panel.setVisible(reviewing)
+    if accept_revision is not None:
+        accept_revision.setEnabled(reviewing)
+    if reject_preview is not None:
+        reject_preview.setEnabled(reviewing)
     if prompt_box is not None:
-        prompt_box.setReadOnly(not busy and not document_ready)
-        if busy:
+        prompt_box.setReadOnly(reviewing or (not busy and not document_ready))
+        if reviewing:
+            placeholder = "Accept or reject the validated preview."
+        elif busy:
             placeholder = "Steer the current CAD run..."
         elif document_ready:
             placeholder = "Message VibeCAD..."
@@ -2345,7 +2633,9 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
                 or "Save this VibeCAD document to enable VibeCAD."
             )
         prompt_box.setPlaceholderText(placeholder)
-    if busy:
+    if reviewing:
+        status_text = text or "Review the validated preview."
+    elif busy:
         status_text = text or ""
     elif not document_ready:
         status_text = str(
@@ -2374,8 +2664,29 @@ def _stop_prompt_from_panel() -> None:
     if not _is_assistant_run_active():
         _render_assistant_run_state(dock)
         return
+    reviewing = _candidate_review_active()
     _assistant_run_controller.request_cancel()
     _cancel_question_round()
+    if reviewing:
+        _resolve_candidate_review("reject")
+        _render_assistant_run_state(
+            dock, text="Preview rejected. Restoring the accepted design..."
+        )
+        _append_conversation(
+            "User",
+            "Stop and reject preview.",
+            persist=True,
+            metadata={
+                "source": "stop",
+                "decision": "reject",
+                "stage": "candidate_review",
+            },
+        )
+        _append_conversation(
+            "AI thinking",
+            "The preview was rejected. The accepted design stays unchanged.",
+        )
+        return
     _render_assistant_run_state(
         dock, text="Stopping after the current provider/tool step..."
     )
@@ -2473,6 +2784,9 @@ def _execute_assistant_run(
     def _question_callback(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return _request_user_answers(questions, _cancelled)
 
+    def _candidate_decision_callback(payload: dict[str, Any]) -> str:
+        return _request_candidate_decision(dict(payload), _cancelled)
+
     def _progress_on_document_thread(event: dict[str, Any]) -> None:
         current_dock = _find_dock() or dock
         if event.get("event") == "provider_turn_output":
@@ -2560,6 +2874,7 @@ def _execute_assistant_run(
             "cancellation_check": _cancelled,
             "steering_check": _steering_messages,
             "question_callback": _question_callback,
+            "candidate_decision_callback": _candidate_decision_callback,
             "document_thread_dispatch": _dispatch_to_document_thread,
         }
         try:
@@ -2757,6 +3072,9 @@ def _refresh_assistant_for_document_change() -> None:
     _refresh_modeling_engine_selector(dock)
     _refresh_reference_chips(dock)
     _refresh_view_status(dock)
+    revision_panel = _find_child("QWidget", "VibeRevisionPanel", dock)
+    if revision_panel is not None and revision_panel.isVisible():
+        _refresh_revision_timeline(dock)
     _render_assistant_run_state(dock)
 
 
@@ -2859,6 +3177,16 @@ class _VibeCADDocumentObserver:
             _sketch_close_continuation_controller.clear()
         _schedule_assistant_document_refresh()
 
+    def slotRestoredDocument(self, doc) -> None:
+        try:
+            recovered = get_service().recover_open_document_acceptance()
+        except Exception as exc:
+            _warn(f"VibeCAD acceptance recovery on document open failed: {exc}")
+        else:
+            if recovered:
+                _warn("VibeCAD restored the last accepted revision after an interrupted operation.")
+        _schedule_assistant_document_refresh()
+
     def slotChangedObject(self, obj, property_name) -> None:
         is_restoring = getattr(App, "isRestoring", None)
         if callable(is_restoring) and bool(is_restoring()):
@@ -2879,6 +3207,9 @@ class _VibeCADDocumentObserver:
             _schedule_assistant_document_refresh()
 
     def slotStartSaveDocument(self, doc, filepath) -> None:
+        from VibeCADSaveBoundary import internal_document_save_active
+        if internal_document_save_active():
+            return
         _snapshot_active_document_conversation(doc)
         try:
             from VibeCADScriptedEditor import suspend_preview_for_save
@@ -2888,6 +3219,9 @@ class _VibeCADDocumentObserver:
             _warn(f"VibeCAD preview cleanup before save failed: {exc}")
 
     def slotFinishSaveDocument(self, doc, filepath) -> None:
+        from VibeCADSaveBoundary import internal_document_save_active
+        if internal_document_save_active():
+            return
         _move_saved_document_conversation(doc, str(filepath))
         try:
             from VibeCADScriptedEditor import restore_preview_after_save
@@ -2958,6 +3292,188 @@ def _connect_document_observer() -> None:
 # ---------------------------------------------------------------------------
 # Panel construction
 # ---------------------------------------------------------------------------
+
+
+def _selected_revision_ids(dock: Any) -> list[str]:
+    from PySide import QtCore
+
+    timeline = _find_child("QListWidget", "VibeRevisionTimeline", dock)
+    if timeline is None:
+        return []
+    return [
+        str(item.data(QtCore.Qt.UserRole) or "").strip()
+        for item in timeline.selectedItems()
+        if str(item.data(QtCore.Qt.UserRole) or "").strip()
+    ]
+
+
+def _refresh_revision_timeline(dock: Any | None = None) -> None:
+    from PySide import QtCore, QtWidgets
+
+    current_dock = dock or _find_dock()
+    timeline = _find_child("QListWidget", "VibeRevisionTimeline", current_dock)
+    empty = _find_child("QLabel", "VibeRevisionEmpty", current_dock)
+    if timeline is None:
+        return
+    selected = set(_selected_revision_ids(current_dock))
+    timeline.clear()
+    try:
+        revisions = get_service().revision_timeline()
+    except Exception as exc:
+        revisions = []
+        if empty is not None:
+            empty.setText(f"Revision history is not available: {exc}")
+    else:
+        if empty is not None:
+            empty.setText("No accepted AI revisions yet.")
+    for revision in reversed(revisions):
+        request = str(revision.get("user_request") or "Accepted change").strip()
+        timestamp = str(revision.get("timestamp") or "").replace("T", " ").replace("Z", "")
+        marker = "Current · " if revision.get("is_head") else ""
+        item = QtWidgets.QListWidgetItem(f"{marker}{request}\n{timestamp}")
+        revision_id = str(revision.get("revision_id") or "")
+        item.setData(QtCore.Qt.UserRole, revision_id)
+        item.setToolTip(str(revision.get("interpreted_intent") or request))
+        timeline.addItem(item)
+        if revision_id in selected or (not selected and revision.get("is_head")):
+            item.setSelected(True)
+    if empty is not None:
+        empty.setVisible(not revisions)
+    timeline.setVisible(bool(revisions))
+
+
+def _toggle_revision_panel(checked: bool) -> None:
+    dock = _find_dock()
+    panel = _find_child("QWidget", "VibeRevisionPanel", dock)
+    if panel is not None:
+        panel.setVisible(bool(checked))
+    if checked:
+        _refresh_revision_timeline(dock)
+
+
+def _compare_selected_revisions() -> None:
+    from PySide import QtWidgets
+
+    dock = _find_dock()
+    selected = _selected_revision_ids(dock)
+    if len(selected) != 2:
+        _set_status_line("Select exactly two revisions to compare.", dock=dock)
+        return
+    try:
+        comparison = get_service().compare_revisions(selected[0], selected[1])
+    except Exception as exc:
+        _set_status_line(f"Could not compare revisions: {exc}", dock=dock)
+        return
+    changes = comparison.get("changes") or {}
+    added = comparison.get("objects_added") or []
+    removed = comparison.get("objects_removed") or []
+    summary = f"{len(changes)} provenance fields changed"
+    if added or removed:
+        summary += f"; {len(added)} objects added and {len(removed)} removed"
+    dialog = QtWidgets.QMessageBox(_find_dock())
+    dialog.setWindowTitle("Compare Revisions")
+    dialog.setIcon(QtWidgets.QMessageBox.Information)
+    dialog.setText(summary + ".")
+    dialog.setInformativeText("The comparison uses accepted revision records. The CAD files remain unchanged.")
+    dialog.setDetailedText(json.dumps(comparison, indent=2, sort_keys=True))
+    dialog.exec()
+
+
+def _export_revision_report() -> None:
+    from PySide import QtWidgets
+
+    dock = _find_dock()
+    selected = _selected_revision_ids(dock)
+    target, _selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+        dock,
+        "Export Revision Report",
+        "VibeCAD-revision-report.json",
+        "JSON report (*.json)",
+    )
+    if not target:
+        return
+    if not target.lower().endswith(".json"):
+        target += ".json"
+    try:
+        result = get_service().export_revision_report(target, selected or None)
+    except Exception as exc:
+        _set_status_line(f"Could not export revision report: {exc}", dock=dock)
+        return
+    count = len(result.get("revision_ids") or [])
+    _set_status_line(f"Exported a report for {count} accepted revision(s).", dock=dock)
+
+
+def _branch_selected_revision() -> None:
+    from PySide import QtWidgets
+
+    dock = _find_dock()
+    selected = _selected_revision_ids(dock)
+    if len(selected) != 1:
+        _set_status_line("Select one revision to create a branch.", dock=dock)
+        return
+    target, _selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+        dock,
+        "Create Revision Branch",
+        "VibeCAD-branch.FCStd",
+        "FreeCAD document (*.FCStd)",
+    )
+    if not target:
+        return
+    if not target.lower().endswith(".fcstd"):
+        target += ".FCStd"
+    try:
+        get_service().create_revision_branch(selected[0], target)
+    except Exception as exc:
+        _set_status_line(f"Could not create revision branch: {exc}", dock=dock)
+        return
+    _set_status_line("Created an exact CAD branch with a lineage record.", dock=dock)
+
+
+def _restore_selected_revision() -> None:
+    from PySide import QtWidgets
+
+    dock = _find_dock()
+    selected = _selected_revision_ids(dock)
+    if len(selected) != 1:
+        _set_status_line("Select one revision to restore.", dock=dock)
+        return
+    answer = QtWidgets.QMessageBox.question(
+        dock,
+        "Restore Revision",
+        "Restore this accepted revision? The current accepted revision stays in history.",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+        QtWidgets.QMessageBox.Cancel,
+    )
+    if answer != QtWidgets.QMessageBox.Yes:
+        return
+    revision_id = selected[0]
+    service = get_service()
+    _set_status_line("Restoring and validating the selected revision...", dock=dock)
+
+    def worker() -> None:
+        try:
+            restore_accepted_revision(
+                service,
+                revision_id,
+                document_thread_dispatch=_dispatch_to_document_thread,
+            )
+        except Exception as exc:
+            message = f"Revision restore failed safely: {exc}"
+        else:
+            message = "Revision restored and validated."
+
+        def finish() -> None:
+            _refresh_assistant_for_document_change()
+            _refresh_revision_timeline(_find_dock())
+            _set_status_line(message, dock=_find_dock())
+
+        _dispatch_to_document_thread(finish)
+
+    threading.Thread(
+        target=worker,
+        name="VibeCADRevisionRestore",
+        daemon=True,
+    ).start()
 
 
 def _assistant_panel_is_built(dock: Any) -> bool:
@@ -3079,6 +3595,74 @@ def _build_panel_widget():
     lower_layout.setSpacing(6)
     splitter.addWidget(lower)
 
+    # --- Accepted revisions (compact and hidden until requested) ----------
+    revision_toggle = QtWidgets.QToolButton(lower)
+    revision_toggle.setObjectName("VibeRevisionToggle")
+    revision_toggle.setText("Revision History")
+    revision_toggle.setCheckable(True)
+    revision_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+    revision_toggle.setArrowType(QtCore.Qt.RightArrow)
+
+    revision_panel = QtWidgets.QWidget(lower)
+    revision_panel.setObjectName("VibeRevisionPanel")
+    revision_panel.setVisible(False)
+    revision_layout = QtWidgets.QVBoxLayout(revision_panel)
+    revision_layout.setContentsMargins(0, 0, 0, 0)
+    revision_layout.setSpacing(4)
+
+    revision_empty = QtWidgets.QLabel("No accepted AI revisions yet.", revision_panel)
+    revision_empty.setObjectName("VibeRevisionEmpty")
+    revision_empty.setWordWrap(True)
+    revision_layout.addWidget(revision_empty)
+
+    revision_timeline = QtWidgets.QListWidget(revision_panel)
+    revision_timeline.setObjectName("VibeRevisionTimeline")
+    revision_timeline.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+    revision_timeline.setAlternatingRowColors(True)
+    revision_timeline.setMinimumHeight(96)
+    revision_timeline.setMaximumHeight(190)
+    revision_timeline.setAccessibleName("Accepted revision history")
+    revision_layout.addWidget(revision_timeline)
+
+    revision_actions = QtWidgets.QWidget(revision_panel)
+    revision_actions_layout = QtWidgets.QHBoxLayout(revision_actions)
+    revision_actions_layout.setContentsMargins(0, 0, 0, 0)
+    revision_actions_layout.setSpacing(4)
+    revision_refresh = QtWidgets.QPushButton("Refresh", revision_actions)
+    revision_refresh.setObjectName("VibeRevisionRefresh")
+    revision_refresh.clicked.connect(lambda: _refresh_revision_timeline(_find_dock()))
+    revision_compare = QtWidgets.QPushButton("Compare", revision_actions)
+    revision_compare.setObjectName("VibeRevisionCompare")
+    revision_compare.clicked.connect(_compare_selected_revisions)
+    revision_restore = QtWidgets.QPushButton("Restore", revision_actions)
+    revision_restore.setObjectName("VibeRevisionRestore")
+    revision_restore.clicked.connect(_restore_selected_revision)
+    revision_report = QtWidgets.QPushButton("Report", revision_actions)
+    revision_report.setObjectName("VibeRevisionReport")
+    revision_report.setAccessibleName("Export accepted revision report")
+    revision_report.clicked.connect(_export_revision_report)
+    revision_branch = QtWidgets.QPushButton("Branch", revision_actions)
+    revision_branch.setObjectName("VibeRevisionBranch")
+    revision_branch.setAccessibleName("Create branch from selected revision")
+    revision_branch.clicked.connect(_branch_selected_revision)
+    revision_actions_layout.addWidget(revision_refresh)
+    revision_actions_layout.addWidget(revision_compare)
+    revision_actions_layout.addWidget(revision_report)
+    revision_actions_layout.addStretch(1)
+    revision_actions_layout.addWidget(revision_branch)
+    revision_actions_layout.addWidget(revision_restore)
+    revision_layout.addWidget(revision_actions)
+
+    def toggle_revisions(checked: bool) -> None:
+        revision_toggle.setArrowType(
+            QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow
+        )
+        _toggle_revision_panel(checked)
+
+    revision_toggle.toggled.connect(toggle_revisions)
+    lower_layout.addWidget(revision_toggle)
+    lower_layout.addWidget(revision_panel)
+
     # --- Model questions (hidden unless the current turn needs input) ------
     question_panel = QtWidgets.QScrollArea(lower)
     question_panel.setObjectName("VibeQuestionPanel")
@@ -3105,6 +3689,65 @@ def _build_panel_widget():
     status_line.setWordWrap(True)
     status_line.setVisible(False)
     lower_layout.addWidget(status_line)
+
+    run_state = QtWidgets.QLabel(lower)
+    run_state.setObjectName("VibeRunState")
+    run_state.setAccessibleName("AI run state")
+    run_state.setVisible(False)
+    lower_layout.addWidget(run_state)
+
+    # --- Validated candidate review --------------------------------------
+    candidate_review = QtWidgets.QWidget(lower)
+    candidate_review.setObjectName("VibeCandidateReview")
+    candidate_review.setAccessibleName("Validated CAD preview review")
+    candidate_review.setVisible(False)
+    candidate_review_layout = QtWidgets.QVBoxLayout(candidate_review)
+    candidate_review_layout.setContentsMargins(8, 8, 8, 8)
+    candidate_review_layout.setSpacing(6)
+
+    candidate_summary = QtWidgets.QLabel(candidate_review)
+    candidate_summary.setObjectName("VibeCandidateReviewSummary")
+    candidate_summary.setAccessibleName("Validated preview summary")
+    candidate_summary.setWordWrap(True)
+    candidate_summary.setText(
+        "The preview passed validation. Accept it or reject it."
+    )
+    candidate_review_layout.addWidget(candidate_summary)
+
+    candidate_actions = QtWidgets.QWidget(candidate_review)
+    candidate_actions_layout = QtWidgets.QHBoxLayout(candidate_actions)
+    candidate_actions_layout.setContentsMargins(0, 0, 0, 0)
+    candidate_actions_layout.setSpacing(6)
+
+    reject_preview = QtWidgets.QPushButton("Reject preview", candidate_actions)
+    reject_preview.setObjectName("VibeRejectPreview")
+    reject_preview.setAccessibleName("Reject preview")
+    reject_preview.setAccessibleDescription(
+        "Reject this validated preview and keep the prior accepted design. "
+        "Keyboard shortcut: Alt+R."
+    )
+    reject_preview.setShortcut(QtGui.QKeySequence("Alt+R"))
+    reject_preview.setFocusPolicy(QtCore.Qt.StrongFocus)
+    reject_preview.setEnabled(False)
+    reject_preview.clicked.connect(_reject_candidate_from_panel)
+
+    accept_revision = QtWidgets.QPushButton("Accept revision", candidate_actions)
+    accept_revision.setObjectName("VibeAcceptRevision")
+    accept_revision.setAccessibleName("Accept revision")
+    accept_revision.setAccessibleDescription(
+        "Accept this validated preview as one new revision. "
+        "Keyboard shortcut: Alt+A."
+    )
+    accept_revision.setShortcut(QtGui.QKeySequence("Alt+A"))
+    accept_revision.setFocusPolicy(QtCore.Qt.StrongFocus)
+    accept_revision.setEnabled(False)
+    accept_revision.clicked.connect(_accept_candidate_from_panel)
+
+    candidate_actions_layout.addWidget(reject_preview)
+    candidate_actions_layout.addStretch(1)
+    candidate_actions_layout.addWidget(accept_revision)
+    candidate_review_layout.addWidget(candidate_actions)
+    lower_layout.addWidget(candidate_review)
 
     # --- Composer ----------------------------------------------------------
     composer = QtWidgets.QWidget(lower)
@@ -3289,6 +3932,152 @@ def show_assistant_for_active_workbench() -> None:
     _show_panel()
 
 
+def _apply_onboarding_choice(choice_id: str) -> None:
+    """Open the correct beginner surface and insert one editable request."""
+
+    global _onboarding_dialog
+    choice = start_choice(choice_id)
+    if choice_id == "modify-file":
+        Gui.runCommand("Std_Open")
+    elif App.ActiveDocument is None:
+        App.newDocument("UntitledDesign", "Untitled Design")
+    # The capability router can change the internal authoring strategy later.
+    # This activation only supplies the native beginner workspace.
+    Gui.activateWorkbench("PartDesignWorkbench")
+    _show_panel()
+    dock = _find_dock()
+    prompt = _find_child("QPlainTextEdit", "VibePrompt", dock)
+    if prompt is not None:
+        prompt.setPlainText(choice.prompt)
+        prompt.setFocus()
+        cursor = prompt.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        prompt.setTextCursor(cursor)
+    choose_start(choice_id)
+    if choice_id == "reference-image":
+        _attach_image_from_panel()
+    if _onboarding_dialog is not None:
+        _onboarding_dialog.close()
+        _onboarding_dialog.deleteLater()
+        _onboarding_dialog = None
+
+
+def _onboarding_provider_summary() -> str:
+    """Explain the current AI data boundary without exposing configuration jargon."""
+
+    service = get_service()
+    auth = service.auth_state()
+    if not auth.can_call_provider:
+        return (
+            "AI access is not configured. Your design stays on this Mac until you "
+            "select and configure a provider in Settings. Credentials use secure "
+            "system storage."
+        )
+    provider = service.provider_model() or "the selected AI model"
+    return (
+        f"AI model: {provider}. A request can leave this Mac when you press Send. "
+        "VibeCAD sends only the bounded design context needed for that request. "
+        "Credentials use secure system storage."
+    )
+
+
+def _show_first_launch_onboarding() -> Any | None:
+    """Show one non-modal first-launch dialog when setup is incomplete."""
+
+    global _onboarding_dialog
+    try:
+        if load_state().get("completed"):
+            return None
+    except Exception as exc:
+        _warn(f"VibeCAD onboarding state could not be read: {exc}")
+        return None
+    if _onboarding_dialog is not None:
+        _onboarding_dialog.raise_()
+        _onboarding_dialog.activateWindow()
+        return _onboarding_dialog
+
+    from PySide import QtCore, QtWidgets
+
+    parent = Gui.getMainWindow()
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setObjectName("VibeCADFirstLaunch")
+    dialog.setWindowTitle("Start with VibeCAD")
+    dialog.setModal(False)
+    dialog.setMinimumWidth(520)
+    dialog.setAccessibleName("VibeCAD first launch")
+    layout = QtWidgets.QVBoxLayout(dialog)
+    title = QtWidgets.QLabel("What do you want to make?", dialog)
+    title.setObjectName("VibeCADFirstLaunchTitle")
+    title.setStyleSheet("font-size: 20px; font-weight: 600;")
+    layout.addWidget(title)
+    introduction = QtWidgets.QLabel(
+        "Choose a starting point. You can describe the result in ordinary language.",
+        dialog,
+    )
+    introduction.setWordWrap(True)
+    layout.addWidget(introduction)
+
+    choices = QtWidgets.QWidget(dialog)
+    choices_layout = QtWidgets.QGridLayout(choices)
+    choices_layout.setContentsMargins(0, 6, 0, 6)
+    choice_buttons = []
+    for index, choice in enumerate(START_CHOICES):
+        button = QtWidgets.QPushButton(
+            f"{choice.title}\n{choice.description}", choices
+        )
+        button.setObjectName(f"VibeCADStart_{choice.choice_id}")
+        button.setAccessibleName(choice.title)
+        button.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        button.setAutoDefault(False)
+        button.setMinimumHeight(62)
+        button.setStyleSheet("text-align: left; padding: 8px;")
+        button.clicked.connect(
+            lambda _checked=False, selected=choice.choice_id: _apply_onboarding_choice(selected)
+        )
+        choices_layout.addWidget(button, index // 2, index % 2)
+        choice_buttons.append(button)
+    layout.addWidget(choices)
+
+    privacy = QtWidgets.QLabel(_onboarding_provider_summary(), dialog)
+    privacy.setObjectName("VibeCADFirstLaunchPrivacy")
+    privacy.setWordWrap(True)
+    privacy.setAccessibleName("AI provider and privacy status")
+    layout.addWidget(privacy)
+    later = QtWidgets.QPushButton("Not now", dialog)
+    later.setObjectName("VibeCADFirstLaunchLater")
+    later.setAccessibleName("Close first launch and continue later")
+    later.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+    later.setAutoDefault(False)
+    later.clicked.connect(dialog.close)
+    layout.addWidget(later, 0, QtCore.Qt.AlignmentFlag.AlignRight)
+    tab_order = [*choice_buttons, later]
+    for current, following in zip(tab_order, tab_order[1:]):
+        dialog.setTabOrder(current, following)
+    if choice_buttons:
+        choice_buttons[0].setFocus(QtCore.Qt.FocusReason.TabFocusReason)
+    dialog.finished.connect(lambda _result: _clear_onboarding_dialog(dialog))
+    _onboarding_dialog = dialog
+    dialog.show()
+    dialog.raise_()
+    return dialog
+
+
+def _clear_onboarding_dialog(dialog: Any) -> None:
+    global _onboarding_dialog
+    if _onboarding_dialog is dialog:
+        _onboarding_dialog = None
+
+
+def _schedule_first_launch_onboarding() -> None:
+    global _onboarding_scheduled
+    if _onboarding_scheduled:
+        return
+    _onboarding_scheduled = True
+    from PySide import QtCore
+
+    QtCore.QTimer.singleShot(250, _show_first_launch_onboarding)
+
+
 # ---------------------------------------------------------------------------
 # Workbench activation
 # ---------------------------------------------------------------------------
@@ -3447,6 +4236,381 @@ class AuthStatusCommand(_BaseCommand):
         _show_panel(f"VibeCAD auth status: {auth.status.value}{source}\n{auth.message}")
 
 
+class OrganizationSignInCommand(_BaseCommand):
+    menu_text = "Sign In to Organization..."
+    tooltip = "Sign in with the managed organization identity provider"
+    pixmap = ICON_ACTIVITY
+
+    def IsActive(self) -> bool:
+        try:
+            from VibeCADManagedPolicy import load_managed_policy
+
+            policy = load_managed_policy()
+            return bool(
+                policy.get("managed")
+                and policy.get("identity_mode") in {"oidc", "saml"}
+            )
+        except Exception:
+            return False
+
+    def Activated(self) -> None:
+        from VibeCADManagedPolicy import load_managed_policy
+
+        try:
+            policy = load_managed_policy()
+            if not policy.get("managed") or policy.get("identity_mode") not in {"oidc", "saml"}:
+                raise RuntimeError("An organization identity policy is not active.")
+        except Exception as exc:
+            _show_panel(f"Organization sign-in is unavailable: {exc}")
+            return
+
+        def worker() -> None:
+            try:
+                def open_browser(url: str) -> bool:
+                    def launch() -> bool:
+                        from PySide import QtCore, QtGui
+
+                        return bool(QtGui.QDesktopServices.openUrl(QtCore.QUrl(url)))
+
+                    return bool(_dispatch_to_document_thread(launch))
+
+                if policy.get("identity_mode") == "saml":
+                    from VibeCADSAMLIdentity import run_saml_browser_login
+
+                    principal = run_saml_browser_login(policy, open_browser=open_browser)
+                else:
+                    from VibeCADFederatedIdentity import run_oidc_browser_login
+
+                    principal = run_oidc_browser_login(policy, open_browser=open_browser)
+                if policy.get("scim_enabled"):
+                    get_service().sync_scim_roles(principal["subject"])
+                    principal = get_service().enterprise_principal()
+                result = (
+                    "Organization sign-in is complete.\n\n"
+                    f"Roles: {', '.join(principal['roles'])}"
+                )
+                error = ""
+            except Exception as exc:
+                result = ""
+                error = str(exc)
+
+            def finish() -> None:
+                from PySide import QtWidgets
+
+                if error:
+                    QtWidgets.QMessageBox.warning(
+                        Gui.getMainWindow(), "Organization Sign-In",
+                        f"Sign-in did not complete.\n\n{error}",
+                    )
+                else:
+                    QtWidgets.QMessageBox.information(
+                        Gui.getMainWindow(), "Organization Sign-In", result
+                    )
+
+            _dispatch_to_document_thread(finish)
+
+        threading.Thread(
+            target=worker,
+            name="VibeCADOIDCSignIn",
+            daemon=True,
+        ).start()
+
+
+class OrganizationSignOutCommand(_BaseCommand):
+    menu_text = "Sign Out of Organization"
+    tooltip = "Remove the organization identity session from Keychain"
+    pixmap = ICON_ACTIVITY
+
+    def IsActive(self) -> bool:
+        return OrganizationSignInCommand().IsActive()
+
+    def Activated(self) -> None:
+        from VibeCADManagedPolicy import load_managed_policy
+
+        try:
+            policy = load_managed_policy()
+            organization = str(policy.get("organization_id") or "managed")
+            if policy.get("identity_mode") == "saml":
+                from VibeCADSAMLIdentity import delete_saml_session
+
+                delete_saml_session(organization)
+            else:
+                from VibeCADFederatedIdentity import delete_oidc_session
+
+                delete_oidc_session(organization)
+            _show_panel("The organization session was removed from Keychain.")
+        except Exception as exc:
+            _show_panel(f"Organization sign-out did not complete: {exc}")
+
+
+def _offer_verified_update_download(result: dict[str, Any]) -> None:
+    """Ask for download and reveal consent. Run network and package checks in a worker."""
+    from PySide import QtCore, QtWidgets
+    from VibeCADUpdate import select_macos_update_artifact
+
+    try:
+        artifact = select_macos_update_artifact(list(result.get("artifacts") or []))
+    except Exception as exc:
+        QtWidgets.QMessageBox.warning(
+            Gui.getMainWindow(), "VibeCAD Update", f"No safe macOS package is available.\n\n{exc}"
+        )
+        return
+    answer = QtWidgets.QMessageBox.question(
+        Gui.getMainWindow(),
+        "Download Verified VibeCAD Update?",
+        f"Download {artifact['name']} for VibeCAD {result['release_version']}?\n\n"
+        "VibeCAD will verify the signed size, SHA-256, Gatekeeper result, and notarization ticket. "
+        "It will not open or install the package.",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        QtWidgets.QMessageBox.No,
+    )
+    if answer != QtWidgets.QMessageBox.Yes:
+        return
+    default_directory = QtCore.QStandardPaths.writableLocation(
+        QtCore.QStandardPaths.DownloadLocation
+    )
+    directory = QtWidgets.QFileDialog.getExistingDirectory(
+        Gui.getMainWindow(), "Choose Update Download Folder", default_directory
+    )
+    if not directory:
+        return
+    destination = str(Path(directory) / artifact["name"])
+
+    def worker() -> None:
+        try:
+            from VibeCADManagedPolicy import load_managed_policy, validate_policy
+            from VibeCADUpdate import download_verified_artifact, verify_macos_update_artifact
+
+            policy = validate_policy(load_managed_policy())
+            if policy["update_channel"] == "disabled":
+                raise PermissionError("Update downloads are disabled by organization policy.")
+            if policy["managed"] and result.get("channel") != policy["update_channel"]:
+                raise PermissionError("The verified update no longer matches the managed channel.")
+            downloaded = download_verified_artifact(
+                artifact, destination,
+                allowed_hosts=set(policy["allowed_update_hosts"]),
+            )
+            try:
+                package = verify_macos_update_artifact(downloaded["path"])
+            except Exception:
+                if not downloaded.get("existing"):
+                    Path(downloaded["path"]).unlink(missing_ok=True)
+                raise
+            error = ""
+        except Exception as exc:
+            downloaded = {}
+            package = {}
+            error = str(exc)
+
+        def finish() -> None:
+            try:
+                get_service().record_audit_event(
+                    category="update", action="download",
+                    outcome="failed" if error else "verified",
+                    actor_type="user",
+                    details={
+                        "release_version": result.get("release_version"),
+                        "artifact_name": artifact.get("name"),
+                        "sha256": downloaded.get("sha256"),
+                        "package_verified": bool(package.get("verified")),
+                    },
+                )
+            except Exception:
+                pass
+            if error:
+                QtWidgets.QMessageBox.warning(
+                    Gui.getMainWindow(), "VibeCAD Update Download",
+                    f"The update package was not prepared.\n\n{error}\n\nNo software was opened or installed.",
+                )
+                return
+            reveal = QtWidgets.QMessageBox.question(
+                Gui.getMainWindow(), "Verified Update Ready",
+                "The update package passed all checks. Show it in Finder?\n\n"
+                "VibeCAD will not open or install it.",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if reveal == QtWidgets.QMessageBox.Yes:
+                QtCore.QProcess.startDetached("/usr/bin/open", ["-R", downloaded["path"]])
+
+        _dispatch_to_document_thread(finish)
+
+    threading.Thread(
+        target=worker, name="VibeCADVerifiedUpdateDownload", daemon=True
+    ).start()
+
+
+class CheckForUpdatesCommand(_BaseCommand):
+    menu_text = "Check for VibeCAD Updates..."
+    tooltip = "Check signed update metadata without downloading or installing software"
+    pixmap = ICON_ACTIVITY
+
+    def Activated(self) -> None:
+        from VibeCADUpdate import check_for_updates
+
+        parts = list(App.Version()[:3])
+        current_version = ".".join(str(item) for item in parts)
+        config_path = Path(__file__).resolve().with_name("update-config.json")
+
+        def worker() -> None:
+            try:
+                result = check_for_updates(
+                    current_version,
+                    config_path=config_path,
+                )
+                error = ""
+            except Exception as exc:
+                result = {}
+                error = str(exc)
+
+            def finish() -> None:
+                from PySide import QtWidgets
+
+                audit_error = ""
+                try:
+                    get_service().record_audit_event(
+                        category="update",
+                        action="check",
+                        outcome=("failed" if error else str(result.get("status") or "complete")),
+                        actor_type="user",
+                        details={
+                            "current_version": current_version,
+                            "release_version": result.get("release_version"),
+                            "channel": result.get("channel"),
+                            "verified": bool(result.get("verified")),
+                        },
+                    )
+                except Exception as audit_exc:
+                    audit_error = f"\n\nAudit recording failed: {audit_exc}"
+                if error:
+                    QtWidgets.QMessageBox.warning(
+                        Gui.getMainWindow(),
+                        "VibeCAD Update Check",
+                        f"The update check did not complete.\n\n{error}\n\nNo software was downloaded or installed.{audit_error}",
+                    )
+                    return
+                status = result.get("status")
+                if status == "disabled":
+                    text = "Update checks are disabled by organization policy."
+                elif result.get("available"):
+                    _offer_verified_update_download(result)
+                    return
+                else:
+                    text = (
+                        f"VibeCAD {current_version} is current on the "
+                        f"{result.get('channel', 'managed')} channel."
+                    )
+                QtWidgets.QMessageBox.information(
+                    Gui.getMainWindow(),
+                    "VibeCAD Update Check",
+                    text + f"\n\nNo software was downloaded or installed.{audit_error}",
+                )
+
+            _dispatch_to_document_thread(finish)
+
+        threading.Thread(
+            target=worker,
+            name="VibeCADUpdateCheck",
+            daemon=True,
+        ).start()
+
+
+class ExportAuditReportCommand(_BaseCommand):
+    menu_text = "Export Signed Audit Report..."
+    tooltip = "Export redacted project audit evidence with a Keychain signature"
+    pixmap = ICON_ACTIVITY
+
+    def Activated(self) -> None:
+        from PySide import QtWidgets
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            Gui.getMainWindow(),
+            "Export Signed Audit Report",
+            "VibeCAD-audit-report.json",
+            "JSON audit report (*.json)",
+        )
+        if not path:
+            return
+
+        def worker() -> None:
+            try:
+                report = get_service().export_audit_report(path)
+                error = ""
+            except Exception as exc:
+                report = {}
+                error = str(exc)
+
+            def finish() -> None:
+                if error:
+                    QtWidgets.QMessageBox.warning(
+                        Gui.getMainWindow(), "Audit Report Export",
+                        f"The audit report was not exported.\n\n{error}",
+                    )
+                else:
+                    QtWidgets.QMessageBox.information(
+                        Gui.getMainWindow(), "Audit Report Export",
+                        f"The signed audit report contains {report['event_count']} events.",
+                    )
+
+            _dispatch_to_document_thread(finish)
+
+        threading.Thread(
+            target=worker, name="VibeCADAuditReportExport", daemon=True
+        ).start()
+
+
+def _register_update_help_action() -> None:
+    """Put the signed metadata check in the standard macOS Help menu."""
+    global _update_help_action
+    if _update_help_action is not None:
+        return
+    try:
+        from PySide import QtGui, QtWidgets
+
+        main_window = Gui.getMainWindow()
+        help_menu = main_window.findChild(QtWidgets.QMenu, "menuHelp")
+        if help_menu is None:
+            for action in main_window.menuBar().actions():
+                if action.text().replace("&", "").strip().lower() == "help":
+                    help_menu = action.menu()
+                    break
+        if help_menu is None:
+            raise RuntimeError("The standard Help menu is not available.")
+        action = QtGui.QAction("Check for VibeCAD Updates...", help_menu)
+        action.setObjectName("VibeCADCheckForUpdatesAction")
+        action.setToolTip("Verify signed update metadata; do not install automatically")
+        action.triggered.connect(lambda: Gui.runCommand("VibeCAD_CheckForUpdates"))
+        help_menu.addAction(action)
+        _update_help_action = action
+    except Exception as exc:
+        _warn(f"VibeCAD update menu registration failed: {exc}")
+
+
+def _register_audit_tools_action() -> None:
+    global _audit_report_action
+    if _audit_report_action is not None:
+        return
+    try:
+        from PySide import QtGui, QtWidgets
+
+        main_window = Gui.getMainWindow()
+        tools_menu = main_window.findChild(QtWidgets.QMenu, "menuTools")
+        if tools_menu is None:
+            for action in main_window.menuBar().actions():
+                if action.text().replace("&", "").strip().lower() == "tools":
+                    tools_menu = action.menu()
+                    break
+        if tools_menu is None:
+            raise RuntimeError("The standard Tools menu is not available.")
+        action = QtGui.QAction("Export Signed Audit Report...", tools_menu)
+        action.setObjectName("VibeCADExportAuditReportAction")
+        action.triggered.connect(lambda: Gui.runCommand("VibeCAD_ExportAuditReport"))
+        tools_menu.addAction(action)
+        _audit_report_action = action
+    except Exception as exc:
+        _warn(f"VibeCAD audit report menu registration failed: {exc}")
+
+
 def ensure_preferences_registered() -> None:
     global _preferences_registered
     if _preferences_registered:
@@ -3464,10 +4628,14 @@ def ensure_preferences_registered() -> None:
 
 def ensure_commands_registered() -> None:
     global _commands_registered
+    from VibeCADExportGuard import refresh_export_guards
+
+    refresh_export_guards(App)
     ensure_preferences_registered()
     # VibeCAD's application module calls this before the first workbench
     # activation. Keep it idempotent for in-process module reloads.
     register_startup_assistant()
+    _schedule_first_launch_onboarding()
     _connect_document_observer()
     _apply_startup_context_debug_preferences()
     if _commands_registered:
@@ -3479,6 +4647,12 @@ def ensure_commands_registered() -> None:
     Gui.addCommand("VibeCAD_OpenPreferences", OpenPreferencesCommand())
     Gui.addCommand("VibeCAD_OpenScriptedModel", OpenScriptedModelCommand())
     Gui.addCommand("VibeCAD_AuthStatus", AuthStatusCommand())
+    Gui.addCommand("VibeCAD_OrganizationSignIn", OrganizationSignInCommand())
+    Gui.addCommand("VibeCAD_OrganizationSignOut", OrganizationSignOutCommand())
+    Gui.addCommand("VibeCAD_CheckForUpdates", CheckForUpdatesCommand())
+    Gui.addCommand("VibeCAD_ExportAuditReport", ExportAuditReportCommand())
+    _register_update_help_action()
+    _register_audit_tools_action()
     try:
         from VibeCADScriptedEditor import ensure_scripted_model_editor_registered
 

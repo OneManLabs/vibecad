@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from VibeCADTransactions import run_freecad_transaction
@@ -185,8 +186,8 @@ def run(
         view.Scale = float(scale)
         view.X = float(x_mm)
         view.Y = float(y_mm)
-        active.recompute()
-        projection = _projected_element_inventory(view)
+        _recompute_page_projection(active, target_page)
+        projection = _wait_for_projected_elements(view)
         actual_sources = [obj.Name for obj in list(getattr(view, "Source", []) or [])]
         page_views = [obj.Name for obj in list(getattr(target_page, "Views", []) or [])]
         projection_bounds = _projection_bounds(projection)
@@ -300,6 +301,49 @@ def run(
 
 def _invalid(message: str, **details: Any) -> dict[str, Any]:
     return {"ok": False, "error": message, "retry_same_call": False, **details}
+
+
+def _recompute_page_projection(document: Any, page: Any) -> None:
+    """Compute a new view even when the user disabled live drawing updates."""
+    import FreeCAD as App
+
+    preferences = App.ParamGet(
+        "User parameter:BaseApp/Preferences/Mod/TechDraw/General"
+    )
+    global_update = bool(preferences.GetBool("GlobalUpdateDrawings", True))
+    keep_updated = bool(getattr(page, "KeepUpdated", True))
+    try:
+        preferences.SetBool("GlobalUpdateDrawings", True)
+        page.KeepUpdated = True
+        document.recompute()
+    finally:
+        page.KeepUpdated = keep_updated
+        preferences.SetBool("GlobalUpdateDrawings", global_update)
+
+
+def _wait_for_projected_elements(view: Any, timeout_seconds: float = 10.0) -> dict[str, Any]:
+    """Wait for the GUI HLR worker while continuing to process Qt events."""
+    result = _projected_element_inventory(view)
+    if result.get("ok"):
+        return result
+    try:
+        from PySide import QtCore
+    except Exception:
+        return result
+    deadline = time.monotonic() + float(timeout_seconds)
+    while time.monotonic() < deadline:
+        QtCore.QCoreApplication.processEvents(
+            QtCore.QEventLoop.ProcessEventsFlag.AllEvents, 20
+        )
+        result = _projected_element_inventory(view)
+        if result.get("ok"):
+            return result
+        time.sleep(0.005)
+    return {
+        **result,
+        "error": "Timed out while the TechDraw hidden-line projection was running.",
+        "timeout_seconds": float(timeout_seconds),
+    }
 
 
 def _projected_element_inventory(view: Any) -> dict[str, Any]:

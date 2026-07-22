@@ -282,6 +282,10 @@ def _openai_review_child_main(
         }
         if base_url:
             client_kwargs["base_url"] = base_url
+        from VibeCADNetwork import managed_sdk_http_client
+        managed_client = managed_sdk_http_client()
+        if managed_client is not None:
+            client_kwargs["http_client"] = managed_client
         if timeout_seconds is not None and timeout_seconds > 0:
             client_kwargs["timeout"] = timeout_seconds
         _capture_outbound_request(
@@ -354,6 +358,10 @@ def _anthropic_review_child_main(
         client_kwargs: dict[str, Any] = {"api_key": api_key, "max_retries": 2}
         if base_url:
             client_kwargs["base_url"] = base_url
+        from VibeCADNetwork import managed_sdk_http_client
+        managed_client = managed_sdk_http_client()
+        if managed_client is not None:
+            client_kwargs["http_client"] = managed_client
         if timeout_seconds is not None and timeout_seconds > 0:
             client_kwargs["timeout"] = timeout_seconds
         _capture_outbound_request(

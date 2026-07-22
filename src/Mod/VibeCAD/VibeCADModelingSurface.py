@@ -27,8 +27,11 @@ CORE_CONVERSATION_VIEW_TOOLS = frozenset(
         "core.inspect",
         "core.capture_view_screenshot",
         "core.set_view",
+        "core.update_design_brief",
+        "project.export",
     }
 )
+NATIVE_ANALYSIS_TOOLS = frozenset({"project.analyze_fdm"})
 
 # Domain-specific read entry points stay available to the application, but are
 # not duplicated in provider declarations. ``core.inspect`` is the one
@@ -216,7 +219,9 @@ def resolve_modeling_surface(
                 domain=native_pack.domain,
                 generation="native-v3-unified-inspect",
             ),
-            core_tool_names=tuple(sorted(CORE_CONVERSATION_VIEW_TOOLS)),
+            core_tool_names=tuple(
+                sorted(CORE_CONVERSATION_VIEW_TOOLS | NATIVE_ANALYSIS_TOOLS)
+            ),
             cad_tool_names=cad_names,
             available=True,
             unavailable_reason="",
@@ -342,7 +347,7 @@ def validate_surface_names(
     non_core_names = [
         name
         for name in clean_names
-        if name.partition(".")[0] not in {"conversation", "core"}
+        if name.partition(".")[0] not in {"conversation", "core", "project"}
     ]
     if engine in {"vibescript", "build123d", "openscad"}:
         if scripted and scripted != {engine}:
@@ -353,7 +358,7 @@ def validate_surface_names(
         native_cad = [
             name
             for name in clean_names
-            if name.partition(".")[0] not in {"conversation", "core", "vibescript"}
+            if name.partition(".")[0] not in {"conversation", "core", "project", "vibescript"}
         ]
         if native_cad:
             raise ValueError(
@@ -369,7 +374,7 @@ def validate_surface_names(
             cad_names = [
                 name
                 for name in clean_names
-                if name.partition(".")[0] not in {"conversation", "core"}
+                    if name.partition(".")[0] not in {"conversation", "core", "project"}
             ]
             if cad_names:
                 raise ValueError("An unknown workbench cannot receive CAD authoring tools.")
@@ -377,7 +382,7 @@ def validate_surface_names(
             foreign = [
                 name
                 for name in clean_names
-                if name.partition(".")[0] not in {"conversation", "core"}
+                    if name.partition(".")[0] not in {"conversation", "core", "project"}
                 and name not in set(pack.tool_names)
             ]
             if foreign:

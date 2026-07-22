@@ -1,0 +1,249 @@
+{
+  "schema": "vibecad-implementation-backlog-v1",
+  "updated_at": "2026-07-22T22:19:20Z",
+  "items": [
+    {
+      "id": "P0-001",
+      "milestone": "Phase 0",
+      "work_item": "Complete and record the Apple Silicon baseline build and focused tests",
+      "dependencies": [],
+      "status": "complete",
+      "test_requirements": ["clean configure", "incremental build", "VibeCAD tests", "startup smoke"],
+      "acceptance_criteria": ["Exact commands and results are in PROJECT_STATUS", "Build time, startup time, and package size are measured"]
+    },
+    {
+      "id": "P0-002",
+      "milestone": "Phase 0",
+      "work_item": "Audit fork changes against upstream FreeCAD",
+      "dependencies": ["P0-001"],
+      "status": "complete",
+      "test_requirements": ["merge-base audit", "core patch classification"],
+      "acceptance_criteria": ["Upstream commit is recorded", "Each core patch has an owner and test"]
+    },
+    {
+      "id": "P1-001",
+      "milestone": "Phase 1",
+      "work_item": "Create the production macOS bundle, DMG, PKG, signing, notarization, SBOM, and provenance pipeline",
+      "dependencies": ["P0-001"],
+      "status": "in_progress",
+      "test_requirements": ["bundle smoke", "exact release identity", "identity tamper rejection", "exact artifact-set tamper rejection", "least-privilege workflow", "codesign check", "Gatekeeper check", "notarization check", "256-file source identity", "exact PKG clean-machine transaction", "ownership-safe exact-path uninstall"],
+      "acceptance_criteria": ["Apple Silicon artifacts pass all gates", "Credential-free pipeline parts pass in CI", "The installed PKG creates and reopens one accepted native parametric revision and passes STEP and STL round trips", "Production signing and notarization claims have credential-backed evidence"]
+    },
+    {
+      "id": "P2-001",
+      "milestone": "Phase 2",
+      "work_item": "Implement the beginner-first application shell and AI run states",
+      "dependencies": ["P0-001"],
+      "status": "in_progress",
+      "test_requirements": ["first-launch UI", "engine-neutral intent choices", "failed workspace setup recovery", "keyboard navigation", "stop and steer", "theme tests", "stable seven-state event order", "validated human candidate review", "keyboard acceptance and rejection", "stop during review", "deterministic FreeCAD GUI acceptance", "byte-exact canonical SHA-256 invariance", "read-only project-context refresh"],
+      "acceptance_criteria": ["A new user can create a project without selecting a workbench or engine", "Validation cannot change the canonical CAD file, accepted head, project manifest, accepted project entries, or accepted project-state hash", "Accept creates exactly one revision and Reject or Stop creates no revision"]
+    },
+    {
+      "id": "P3-001",
+      "milestone": "Phase 3",
+      "work_item": "Add the versioned design brief and revision provenance schemas",
+      "dependencies": ["P0-001"],
+      "status": "complete",
+      "test_requirements": ["schema tests", "atomic write tests", "migration tests", "restore tests"],
+      "acceptance_criteria": ["Every accepted AI mutation writes a complete revision record", "Old project data migrates without loss"]
+    },
+    {
+      "id": "P3-002",
+      "milestone": "Phase 3",
+      "work_item": "Unify native and scripted candidate validation, review, and acceptance",
+      "dependencies": ["P3-001"],
+      "status": "complete",
+      "test_requirements": ["failed candidate rollback", "recompute failure", "interrupted operation recovery", "durable validated-candidate contract", "canonical and head invariance during review", "human and automatic provenance", "human rejection without revision creation", "byte-exact canonical backup", "non-mutating project-context reads"],
+      "acceptance_criteria": ["A failed candidate never replaces the accepted revision", "A validated candidate remains pending until an explicit human or automatic decision", "Reject and Stop restore the prior byte-exact CAD and project state", "Inspection cannot change accepted project metadata"]
+    },
+    {
+      "id": "P3-003",
+      "milestone": "Phase 3",
+      "work_item": "Bind accepted CAD and project artifacts to each revision and implement transactional restore and comparison",
+      "dependencies": ["P3-001", "P3-002"],
+      "status": "complete",
+      "test_requirements": ["promotion fault injection", "restore fault injection", "process interruption recovery", "save close reopen recompute compare", "complete CTest suite"],
+      "acceptance_criteria": ["Failed provenance writes cannot leave unrecorded accepted geometry", "Failed CAD saves cannot advance the revision head", "Restore verifies and applies matching CAD, project state, metadata, and head"]
+    },
+    {
+      "id": "P4-001",
+      "milestone": "Phase 4",
+      "work_item": "Implement automatic modeling strategy and Tier 1 and Tier 2 benchmark workflows",
+      "dependencies": ["P3-002", "P2-001"],
+      "status": "in_progress",
+      "test_requirements": ["automatic strategy routing and structure preservation", "Tier 1 deterministic provider transaction benchmark for all seven classes", "Tier 1 live-model benchmark by provider and model", "Tier 2 benchmark", "selection-aware edits", "reopen and export"],
+      "acceptance_criteria": ["Tier 1 is at least 95 percent", "Tier 2 is at least 85 percent or each failure is documented"]
+    },
+    {
+      "id": "P5-001",
+      "milestone": "Phase 5",
+      "work_item": "Complete assemblies, drawings, manufacturing, BOM, and advanced export workflows",
+      "dependencies": ["P4-001"],
+      "status": "pending",
+      "test_requirements": ["assembly", "drawing", "BOM", "manufacturing checks", "round-trip exports"],
+      "acceptance_criteria": ["Tier 3 workflows produce editable and reopenable documents"]
+    },
+    {
+      "id": "P4-002",
+      "milestone": "Phase 4",
+      "work_item": "Add a bounded, privacy-safe provider readiness preflight",
+      "dependencies": ["P3-001"],
+      "status": "complete",
+      "test_requirements": ["macOS Keychain success", "missing credential", "credential timeout", "redacted failure", "real built FreeCAD probe"],
+      "acceptance_criteria": ["A headless readiness check terminates within its limit", "No prompt or CAD data is sent", "Live benchmarks start only for a valid configured provider"]
+    },
+    {
+      "id": "P3-004",
+      "milestone": "Phase 3",
+      "work_item": "Expose revision reports and duplicate accepted CAD revisions as branches",
+      "dependencies": ["P3-003"],
+      "status": "complete",
+      "test_requirements": ["content-bound report", "accepted CAD integrity", "non-overwrite", "lineage failure rollback", "RBAC", "audit", "complete project metadata migration"],
+      "acceptance_criteria": ["A user can export an accepted revision report", "A user can create an exact CAD branch without changing the source", "The new branch opens with migrated design brief, conversation, and lineage"]
+    },
+    {
+      "id": "P4-003",
+      "milestone": "Phase 4",
+      "work_item": "Add safe scale calibration and estimated dimensions for reference images",
+      "dependencies": ["P2-001", "P3-001"],
+      "status": "complete",
+      "test_requirements": ["unit conversion", "tamper rejection", "uncalibrated dimension refusal", "estimated calibrated dimension", "atomic persistence fault", "provider instruction", "accessible control"],
+      "acceptance_criteria": ["An uncalibrated image cannot supply an exact dimension", "A calibrated image value stays labeled as an estimate", "A persistence failure preserves the prior calibration"]
+    },
+    {
+      "id": "P4-004",
+      "milestone": "Phase 4",
+      "work_item": "Add structured guided FDM manufacturing analysis",
+      "dependencies": ["P3-002"],
+      "status": "complete",
+      "test_requirements": ["native validity", "watertight solid", "wall heuristic", "hole heuristic", "overhang and orientation", "read-only state", "provider schema budget", "real OpenCASCADE shape"],
+      "acceptance_criteria": ["The assistant can inspect final native objects for FDM risks", "Heuristics are not presented as certification", "Analysis does not mutate the CAD document"]
+    },
+    {
+      "id": "P5-002",
+      "milestone": "Phase 5",
+      "work_item": "Add typed common 3D exports with real round-trip checks",
+      "dependencies": ["P3-003"],
+      "status": "complete",
+      "test_requirements": ["STL", "3MF", "OBJ", "STEP", "IGES", "non-overwrite", "managed policy", "RBAC", "real reopen"],
+      "acceptance_criteria": ["Each supported format uses exact source objects", "Each new artifact is content-bound and cannot overwrite a user file", "Each format reopens as usable geometry or mesh"]
+    },
+    {
+      "id": "P5-003",
+      "milestone": "Phase 5",
+      "work_item": "Add typed exact-page TechDraw PDF, DXF, and SVG export",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["exact page", "PDF signature", "DXF parse markers", "SVG parse marker", "non-overwrite", "managed policy", "RBAC", "real FreeCAD GUI export"],
+      "acceptance_criteria": ["The provider exports only the named TechDraw page", "The artifact is content-bound and cannot overwrite a user file", "PDF, DXF, and SVG output is nonempty and parseable"]
+    },
+    {
+      "id": "P5-004",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a complete typed manufacturing drawing package",
+      "dependencies": ["P5-003"],
+      "status": "complete",
+      "test_requirements": ["typed page", "live view", "native dimension", "revision annotation", "accepted revision", "save-close-reopen-recompute", "dimension readback", "export after reopen", "restore"],
+      "acceptance_criteria": ["One provider turn accepts the complete drawing package", "The reopened drawing keeps its source links and measured value", "Restoring the parent removes the drawing package safely"]
+    },
+    {
+      "id": "P5-005",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a solved native assembly with BOM, interference, and replacement",
+      "dependencies": ["P3-003"],
+      "status": "complete",
+      "test_requirements": ["native hierarchy", "grounding", "joint solve", "semantic isolated validation", "save-close-reopen-recompute", "BOM", "interference", "joint-safe replacement", "compare", "restore"],
+      "acceptance_criteria": ["One provider turn accepts a solved native assembly", "The reopened joint and component links remain valid", "BOM and interference results match after reopen", "Restoring the parent removes the assembly safely"]
+    },
+    {
+      "id": "P5-006",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen spreadsheet-driven parametric size variants",
+      "dependencies": ["P3-003"],
+      "status": "complete",
+      "test_requirements": ["named aliases", "expression links", "downstream recompute", "variant update", "semantic isolated validation", "save-close-reopen", "export", "compare", "restore"],
+      "acceptance_criteria": ["Named spreadsheet parameters drive editable native geometry", "A variant update recomputes all linked features", "The accepted variant reopens and exports", "Restoring the parent restores prior parameter values and geometry"]
+    },
+    {
+      "id": "P5-007",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen native material assignments and BOM metadata",
+      "dependencies": ["P5-005"],
+      "status": "complete",
+      "test_requirements": ["native material card", "typed assignment", "save-close-reopen", "BOM material", "semantic isolated validation", "compare", "restore"],
+      "acceptance_criteria": ["A typed material assignment persists in the native document", "Assembly BOM uses the assigned material", "The accepted revision reopens with the same material", "Restoring the parent restores prior material state"]
+    },
+    {
+      "id": "P5-008",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen native mesh conversion and repair workflows",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["mesh analysis", "shape-to-mesh", "mesh-to-shape", "defect checks", "save-close-reopen", "export", "compare", "restore"],
+      "acceptance_criteria": ["Typed tools convert editable geometry to a validated mesh", "Typed tools recover usable geometry from a supported mesh", "The accepted mesh workflow reopens and exports", "Restoring the parent removes conversion artifacts safely"]
+    },
+    {
+      "id": "P5-009",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a native surface creation and downstream solid workflow",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["typed surface operation", "native validity", "downstream shape", "save-close-reopen", "export", "compare", "restore"],
+      "acceptance_criteria": ["A typed tool creates or converts a native editable surface", "The surface supports a validated downstream shape workflow", "The accepted surface workflow reopens and exports", "Restoring the parent removes surface artifacts safely"]
+    },
+    {
+      "id": "P5-010",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a native CAM setup and bounded toolpath workflow",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["native job", "stock", "tool controller", "bounded operation", "path validation", "save-close-reopen", "post-process evidence", "compare", "restore"],
+      "acceptance_criteria": ["Typed tools create a native CAM job with explicit stock and tool data", "A bounded operation produces a valid native path", "The accepted CAM workflow reopens and produces controlled output", "Restoring the parent removes CAM artifacts safely"]
+    },
+    {
+      "id": "P5-011",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a native FEM analysis and supported solve workflow",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["native analysis", "material", "mesh", "constraints", "supported solver", "result validation", "save-close-reopen", "compare", "restore"],
+      "acceptance_criteria": ["Typed tools create a native FEM analysis with explicit physical inputs", "A supported solver produces validated native results", "The accepted FEM workflow reopens with its analysis graph", "Restoring the parent removes FEM artifacts safely"]
+    },
+    {
+      "id": "P5-012",
+      "milestone": "Phase 5",
+      "work_item": "Accept and reopen a native multi-operation CAM workflow",
+      "dependencies": ["P5-010"],
+      "status": "complete",
+      "test_requirements": ["profile operation", "pocket operation", "drilling operation", "tool sequencing", "collision analysis", "save-close-reopen", "post-process evidence", "compare", "restore"],
+      "acceptance_criteria": ["Typed tools create bounded native profile, pocket, and drilling paths", "Tool and operation sequencing persists after reopen", "The accepted workflow produces controlled output without protected-model collision", "Restoring the parent removes all CAM artifacts safely"]
+    },
+    {
+      "id": "P6-001",
+      "milestone": "Phase 6",
+      "work_item": "Implement enterprise policy, RBAC, identity boundaries, audit events, proxy, CA, and MDM settings",
+      "dependencies": ["P3-001"],
+      "status": "complete",
+      "test_requirements": ["policy precedence", "signed central policy verification and rollback defense", "managed proxy and pinned custom-CA transport", "RBAC denial", "audit redaction", "managed preference tests", "OIDC signature and claim validation", "authorization-code PKCE loopback sign-in", "SAML signed assertion and wrapping defense", "SCIM schema, endpoint, role override, and fail-closed tests", "organization membership atomic promotion", "audit archive promotion fault injection", "signed audit report verification", "central audit signed receipt and local evidence retention"],
+      "acceptance_criteria": ["Managed provider policy and audit events work", "Local-only and managed-gateway modes pass tests"]
+    },
+    {
+      "id": "P7-001",
+      "milestone": "Phase 7",
+      "work_item": "Complete release security, privacy, performance, accessibility, recovery, and clean-machine gates",
+      "dependencies": ["P1-001", "P4-001", "P5-001", "P6-001"],
+      "status": "pending",
+      "test_requirements": ["security suite", "performance suite", "accessibility review", "clean-machine acceptance"],
+      "acceptance_criteria": ["No critical or high unmitigated issue remains", "Production release checklist passes"]
+    },
+    {
+      "id": "P8-001",
+      "milestone": "Phase 8",
+      "work_item": "Keep Windows and Linux portable and define follow-up parity work",
+      "dependencies": ["P7-001"],
+      "status": "pending",
+      "test_requirements": ["Windows smoke", "Linux smoke", "schema compatibility"],
+      "acceptance_criteria": ["Shared logic builds or passes smoke tests on all supported systems"]
+    }
+  ]
+}

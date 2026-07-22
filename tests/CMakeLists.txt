@@ -142,6 +142,9 @@ foreach (exe ${TestExecutables})
             ENVIRONMENT_MODIFICATION "${_test_env_mod}")
     else()
         set_target_properties(${exe} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
-        gtest_discover_tests(${exe})
+        # CAD test binaries can need several seconds to load OpenCASCADE and
+        # workbench libraries on macOS runners. Use an explicit discovery
+        # budget so inventory generation does not fail under normal load.
+        gtest_discover_tests(${exe} DISCOVERY_TIMEOUT 30)
     endif()
 endforeach()

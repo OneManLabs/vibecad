@@ -558,7 +558,8 @@ def _find_solver(analysis: Any) -> Any:
 
 
 def _proxy_type(obj: Any) -> str:
-    return str(getattr(getattr(obj, "Proxy", None), "Type", "") or "")
+    proxy_type = str(getattr(getattr(obj, "Proxy", None), "Type", "") or "")
+    return proxy_type or str(getattr(obj, "TypeId", "") or "")
 
 
 def _add_operation_properties(solver: Any, operation_id: str, analysis_name: str, state: str) -> None:
@@ -719,6 +720,8 @@ def _pipeline_fields(data: Any) -> dict[str, Any]:
         record: dict[str, Any] = {
             "tuple_count": int(values.shape[0]) if values.ndim else int(values.size),
             "component_count": int(values.shape[1]) if values.ndim > 1 else 1,
+            "value_count": int(values.size),
+            "finite_count": int(finite.size),
         }
         if finite.size:
             record.update(

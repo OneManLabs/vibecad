@@ -893,6 +893,7 @@ class Config:
     AdditionalMacroPaths = utils.str_to_paths(App.ConfigGet("AdditionalMacroPaths"))
     RunMode: str = App.ConfigGet('RunMode')
     DisabledAddons: set[str] = set(mod for mod in App.ConfigGet("DisabledAddons").split(";") if mod)
+    ExternalPluginsEnabled: bool = True
 
 
 @transient
@@ -937,7 +938,8 @@ class DarwinPlatform:
 
     def post(self) -> None:
         # add special path for MacOSX (bug #0000307): Where is this bug documented?
-        sys.path.append(os.path.expanduser("~/Library/Application Support/FreeCAD/Mod"))
+        if Config.ExternalPluginsEnabled:
+            sys.path.append(os.path.expanduser("~/Library/Application Support/FreeCAD/Mod"))
 
 
 class ModState(IntEnum):
@@ -1337,6 +1339,31 @@ class InitPipeline:
     ext_mod_scanner = ExtModScanner()
     search_paths = SearchPaths()
 
+    @staticmethod
+    def managed_external_plugins_enabled(std_mod: Path) -> bool:
+        """Read the product policy before user-controlled module paths are added."""
+        policy_dir = std_mod / "VibeCAD"
+        policy_module = policy_dir / "VibeCADManagedPolicy.py"
+        if not policy_module.is_file():
+            return True
+        inserted = str(policy_dir) not in sys.path
+        if inserted:
+            sys.path.insert(0, str(policy_dir))
+        try:
+            from VibeCADManagedPolicy import load_managed_policy
+
+            policy = load_managed_policy()
+            return not policy.get("managed") or bool(policy.get("external_plugins_enabled"))
+        except Exception as exc:
+            Err(f"Managed external-plugin policy failed closed: {exc!s}\n")
+            return False
+        finally:
+            if inserted:
+                try:
+                    sys.path.remove(str(policy_dir))
+                except ValueError:
+                    pass
+
     def added_python_packages(self) -> PathSet:
         """
         Additional python packages installed by AddonManager/pip.
@@ -1400,11 +1427,34 @@ class InitPipeline:
         Log("Init:   Searching for modules...")
         mods = self.dir_mod_scanner
         mods.scan_and_override(std_mod)
-        mods.scan_and_override(user_mod)
-        mods.scan_and_override(user_macro / "Mod")
-        additional_mods = Config.AdditionalModulePaths + Config.AdditionalMacroPaths
-        for add in additional_mods:
-            mods.scan_and_override(add, flat=True)
+        Config.ExternalPluginsEnabled = self.managed_external_plugins_enabled(std_mod)
+        if Config.ExternalPluginsEnabled:
+            mods.scan_and_override(user_mod)
+            mods.scan_and_override(user_macro / "Mod")
+            additional_mods = Config.AdditionalModulePaths + Config.AdditionalMacroPaths
+            for add in additional_mods:
+                mods.scan_and_override(add, flat=True)
+        else:
+            Log("Init:   Managed policy disabled external module discovery\n")
+            blocked_roots = [
+                user_mod,
+                user_macro,
+                self.added_python_packages(),
+                Path.home() / ".FreeCAD" / "Mod",
+                Path.home() / "Library" / "Application Support" / "FreeCAD" / "Mod",
+                *Config.AdditionalModulePaths,
+                *Config.AdditionalMacroPaths,
+            ]
+            flat_roots = []
+            for root in blocked_roots:
+                flat_roots.extend(root.iter() if isinstance(root, PathSet) else [root])
+            resolved_roots = [resolve_path(path) for path in flat_roots]
+            retained = []
+            for path in search_paths.sys_path.build():
+                resolved = resolve_path(path)
+                if not any(resolved == root or resolved.is_relative_to(root) for root in resolved_roots):
+                    retained.append(path)
+            search_paths.sys_path = PathSet(retained)
 
         # to have all the module-paths available in FreeCADGuiInit.py:
         App.__ModDirs__ = [str(d) for d in mods.dirs()]
@@ -1413,7 +1463,8 @@ class InitPipeline:
         # from FreeCAD.Module import package
         import_path = PathSet([libraries])
         import_path.add(std_mod, PathPriority.OverrideFirst)
-        import_path.add(user_mod, PathPriority.FallbackLast)
+        if Config.ExternalPluginsEnabled:
+            import_path.add(user_mod, PathPriority.FallbackLast)
         App.__path__ = [str(path) for path in import_path.build()]
 
         # also add these directories to the sys.path to
@@ -1431,11 +1482,12 @@ class InitPipeline:
         )
 
         # Additional installed packages (AddonManager/pip)
-        search_paths.add(
-            self.added_python_packages(),
-            env_path=PathPriority.Ignore,
-            sys_path=PathPriority.FallbackLast,
-        )
+        if Config.ExternalPluginsEnabled:
+            search_paths.add(
+                self.added_python_packages(),
+                env_path=PathPriority.Ignore,
+                sys_path=PathPriority.FallbackLast,
+            )
 
         # Resolve Dir Mods
         for mod in mods.iter():
@@ -1461,11 +1513,22 @@ class InitPipeline:
         search_paths.commit()
 
         # Finally, Module based Mod are loaded from python path
-        self.ext_mod_scanner.scan()
+        if Config.ExternalPluginsEnabled:
+            self.ext_mod_scanner.scan()
         for mod in self.ext_mod_scanner.iter():
             if mod.state == ModState.Resolved:
                 mod.load(search_paths)
                 module_cache.append(mod)
+
+        # VibeCAD can now see every export handler registered by application modules.
+        try:
+            from VibeCADExportGuard import refresh_export_guards
+
+            refresh_export_guards(App)
+        except ImportError:
+            pass
+        except Exception as exc:
+            Err(f"VibeCAD export guard refresh failed: {exc!s}\n")
 
         # Save to use in FreeCADGuiInit.py
         App.__ModCache__ = module_cache

@@ -53,11 +53,15 @@ VIBECAD_SYSTEM_INSTRUCTIONS = """You are VibeCAD, a principal mechanical design 
 
 Turn-start context is deliberately sparse and exact: the active workbench/engine/domain, document identity/count/edit object, and explicit selection. Conversation history is not copied into this packet. Absence from it does not mean an object or program does not exist. Use core.inspect to read only the document, selection, object, active domain, program, API, or image details required by the request. Never guess an internal name, stable reference, revision, API member, or document fact.
 
+Never infer an exact CAD dimension from an image. An image without a valid scale_calibration can support shape and feature observations only; ask for one known length when scale matters. A pixel-derived value from a calibrated image is still an estimate because perspective and lens distortion can change it. Label it as an estimate and do not replace a user-supplied critical dimension with it.
+
 For a new substantial design, begin with a concise written restatement of the intended outcome and the concrete design you propose before the first CAD write. Cover the parts, interfaces, load/contact/motion paths, fit and swept envelopes, manufacturing approach, critical dimensions, and credible failure modes. Challenge whether it assembles, moves, clears, carries load, and can be manufactured. Once the design is accepted or already present in context, continue it; do not restart requirement refinement. Resolve ordinary engineering choices with defensible defaults. When a customer choice materially changes geometry or function, use conversation.ask_user with useful options and a recommended answer. Questions clarify intent; they are not approval gates.
 
 Preserve an existing document, component structure, editable history, and model identity unless replacement was explicitly requested. In a blank user-created document, create the editable component models needed for the new design. The human owns document creation, opening, saving, and project selection.
 
 Use only the tools supplied for the active workbench and edit state. Read each structured result before the next operation.
+
+The turn-start design_brief is the durable, structured authority for purpose, dimensions, interfaces, manufacturing needs, assumptions, and unresolved decisions. When the user adds or changes durable design intent, call core.update_design_brief in the same turn with its exact base revision and complete replacement values for only the changed fields. Do not copy transient tool progress into it. A CAD change and its design-brief update are one accepted revision.
 
 A failed or ineffective feature is a stop condition. Diagnose and repair its upstream cause before adding dependent work, and never repeat an unchanged failed call. Verify features against functional intent, mating geometry, motion and clearance envelopes, manufacturing constraints, and visible form, not merely nonzero volume or solid count. Capture the viewport when visual form matters. State incomplete work as incomplete, keep progress prose concise, and never claim verification you did not perform."""
 
@@ -2098,6 +2102,10 @@ def _openai_child_main(
         client_kwargs["base_url"] = base_url
     if timeout_seconds is not None and timeout_seconds > 0:
         client_kwargs["timeout"] = timeout_seconds
+    from VibeCADNetwork import managed_sdk_http_client
+    managed_client = managed_sdk_http_client()
+    if managed_client is not None:
+        client_kwargs["http_client"] = managed_client
     client = OpenAI(**client_kwargs)
     live_context = dict(context)
     web_search_enabled = _provider_option(live_context, "web_search_enabled")
@@ -2565,6 +2573,14 @@ def _context_image_blocks(
         name = str(entry.get("name") or f"reference-{index}")
         user_label = str(entry.get("label") or "").strip()
         suffix = f"|{user_label}" if user_label else ""
+        calibration = entry.get("scale_calibration")
+        if isinstance(calibration, dict):
+            suffix += (
+                f"|scale={float(calibration.get('millimetres_per_pixel') or 0):.9g}mm/px"
+                "|pixel-dimensions-are-estimates"
+            )
+        else:
+            suffix += "|uncalibrated-no-exact-dimensions"
         label_text = f"R{index}/{total}:{name}{suffix}"
         blocks.append((label_text, mime_type, image_data))
     screenshot_payload = _screenshot_image_payload(
@@ -3021,6 +3037,10 @@ def _anthropic_child_main(
             client_kwargs["base_url"] = base_url
         if timeout_seconds is not None and timeout_seconds > 0:
             client_kwargs["timeout"] = timeout_seconds
+        from VibeCADNetwork import managed_sdk_http_client
+        managed_client = managed_sdk_http_client()
+        if managed_client is not None:
+            client_kwargs["http_client"] = managed_client
         client = anthropic.Anthropic(**client_kwargs)
 
         request_kwargs: dict[str, Any] = {

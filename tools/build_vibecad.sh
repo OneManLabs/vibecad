@@ -9,8 +9,26 @@ repo_root="$(cd -- "${script_dir}/.." && pwd)"
 build_dir="${VIBECAD_BUILD_DIR:-${repo_root}/build/release}"
 build_type="${VIBECAD_BUILD_TYPE:-Release}"
 generator="${VIBECAD_CMAKE_GENERATOR:-Ninja}"
-jobs="${VIBECAD_BUILD_JOBS:-$(nproc)}"
+default_jobs() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+    elif command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.logicalcpu
+    else
+        getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1
+    fi
+}
+
+jobs="${VIBECAD_BUILD_JOBS:-$(default_jobs)}"
 vibecad_requirements="${repo_root}/src/Mod/VibeCAD/requirements.txt"
+provider_python="${VIBECAD_PROVIDER_PYTHON:-}"
+if [[ -z "${provider_python}" ]]; then
+    if [[ -x "${repo_root}/.pixi/envs/default/bin/python3" ]]; then
+        provider_python="${repo_root}/.pixi/envs/default/bin/python3"
+    else
+        provider_python="$(command -v python3)"
+    fi
+fi
 
 clean=0
 run_tests=0
@@ -103,7 +121,7 @@ cmake --build "${build_dir}" --parallel "${jobs}"
 
 if [[ -f "${vibecad_requirements}" ]]; then
     mkdir -p "${build_dir}/Ext"
-    python3 -m pip install \
+    "${provider_python}" -m pip install \
         --disable-pip-version-check \
         --upgrade \
         --target "${build_dir}/Ext" \
@@ -123,7 +141,7 @@ if [[ -n "${install_prefix}" ]]; then
     cmake --install "${build_dir}" --prefix "${install_prefix}"
     if [[ -f "${vibecad_requirements}" ]]; then
         mkdir -p "${install_prefix}/Ext"
-        python3 -m pip install \
+        "${provider_python}" -m pip install \
             --disable-pip-version-check \
             --upgrade \
             --target "${install_prefix}/Ext" \

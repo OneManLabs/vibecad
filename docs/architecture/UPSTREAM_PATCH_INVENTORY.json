@@ -1,0 +1,5376 @@
+{
+  "counts": {
+    "build_packaging_release": 131,
+    "documentation_governance": 12,
+    "upstream_core_or_shared": 331,
+    "vibecad_extension": 540
+  },
+  "file_count": 1014,
+  "files": [
+    {
+      "category": "build_packaging_release",
+      "path": ".github/FUNDING.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/ISSUE_TEMPLATE/1-FUNCTIONAL_PROBLEM_REPORT.yml",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/dependabot.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/labels.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/blackWarning.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/clang.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/codespell.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/cpplint.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/gcc.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/grepMatcherWarning.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/msvc.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/pylintError.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/problemMatcher/pylintWarning.json",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/CI_approved.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/CI_cleanup.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/CI_primary.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/linux/build/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/linux/configure/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/linux/generateCacheKey/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/linux/install/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/macos/build/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/macos/configure/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/macos/generateCacheKey/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/macos/install/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/runCPPTests/runAllTests/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/runCPPTests/runQtTests/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/runCPPTests/runSingleQtTest/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/runCPPTests/runSingleTest/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/runPythonTests/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/windows/getCcache/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/actions/windows/getLibpack/action.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/auto-close_stale_issues_and_pull-requests.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/backport.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/build_release.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/codeql.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/codeql_cpp.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/dependency-review.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/fetch_crowdin_translations.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/issue-metrics.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/labeler.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/push_crowdin_translations.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/scorecards.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_buildPixi.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_buildUbuntu.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_buildWindows.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_lint.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_prepare.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/sub_wrapup.yml",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/vibecad-macos.yml",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/vibecad-release.yml",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/vibecad-windows-installer.yml",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/weekly-build-notes.md",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": ".github/workflows/weekly-compare-link.yml",
+      "status": "D"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": ".gitignore",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": ".packit.yaml",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "AGENTS.md",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "AI_POLICY.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "README.md",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "cMake/FreeCAD_Helpers/InitializeFreeCADBuildOptions.cmake",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "cMake/FreeCAD_Helpers/SetupJSON.cmake",
+      "status": "M"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/images/vibecad-grok-provider-setup.png",
+      "status": "A"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/images/vibecad-mark.svg",
+      "status": "A"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/images/vibecad-workspace.png",
+      "status": "A"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/ui-style-test-baseline.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibecad-failure-analysis.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibecad-goals.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibecad-guiding-spec.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibecad-live-acceptance-report.md",
+      "status": "D"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibecad-release-packaging.md",
+      "status": "A"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/vibescript-system-design-feasibility.md",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/.gitignore",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/FreeCAD-installer.nsi",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/graphics/vibecad-banner.bmp",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/graphics/vibecad-header.bmp",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/icons/VibeCAD.ico",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/include/declarations.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/include/gui.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/TranslatedLanguages.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/arabic.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/basque.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/catalan.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/czech.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/danish.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/dutch.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/english.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/french.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/galician.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/german.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/hungarian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/indonesian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/italian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/japanese.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/norwegian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/polish.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/portuguese.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/portugueseBR.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/romanian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/russian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/slovak.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/spanish.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/swedish.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/turkish.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/lang/ukrainian.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/WindowsInstaller/setup/configure.nsh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/fedora/freecad.spec",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/linux/build_deb_from_appdir.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/.gitignore",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/build.bat",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/build.sh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/linux/create_bundle.sh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/osx/Info.plist.template",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/osx/create_bundle.sh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/osx/dmg_settings.py",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/osx/launcher/FreeCAD.cpp",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/pixi.lock",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/pixi.toml",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/recipe.yaml",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/audit_macos_bundle.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/fix_macos_lib_paths.py",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/install_vibecad_build123d_runtime.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/install_vibecad_codex_runtime.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/install_vibecad_openscad_runtime.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/install_vibecad_provider_deps.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/macos_macho.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/relocate_conda_environment.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/relocate_macos_runtime_rpaths.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/resolve_macos_bundle_version.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/validate_vibecad_macos_runtime.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/scripts/write_vibecad_build123d_manifest.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/windows/create_bundle.sh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/scripts/calculate_macos_dmg_size.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/scripts/macos_sign_and_notarize.zsh",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "pixi.toml",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/3rdParty/GSL",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/3rdParty/OndselSolver",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/Application.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/Application.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/Document.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/Document.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/Document.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/DocumentObject.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/DocumentObjectPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/DocumentPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/App/private/DocumentP.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Base/Interpreter.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Application.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/CommandView.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/DockWindowManager.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/DockWindowManager.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/GLBuffer.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/GuiApplication.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/GuiApplication.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/resource.qrc",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecad-icon-256.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecad.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecadabout.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecadaboutdev.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecadsplash.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Icons/vibecadsplash_2x.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/MainWindow.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/MainWindowPy.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/MainWindowPy.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/NaviCube.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Navigation/NavigationStyle.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/NotificationArea.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePackTemplates/Shortcuts.cfg",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePacks/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePacks/VibeCAD Preferences/VibeCAD Preferences.cfg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePacks/VibeDark/VibeDark.cfg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePacks/VibeLight/VibeLight.cfg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePacks/package.xml",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePages/DlgSettingsGeneral.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PreferencePages/DlgSettingsWorkbenchesImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/ProgressBar.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PythonWrapper.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/PythonWrapper.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Quarter/QuarterWidgetP.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Selection/SoFCUnifiedSelection.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Selection/SoFCUnifiedSelection.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/StartupProcess.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/StartupProcess.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/VibeDark.qss",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/VibeLight.qss",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/FreecadLogo.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/FreecadLogo.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/OpenDark_check.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/OpenDark_radiobutton.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/OpenLight_check.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/OpenLight_radiobutton.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_arrow_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_closed_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_closed_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_open_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_end_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_closed_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_closed_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_open_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_more_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_vline_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_vline_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/branch_vline_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_detach.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_down_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_down_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_expand.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_left_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_more_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_right_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_sizegrip.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_up_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/dark_up_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_detach.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_down_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_down_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_expand.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_left_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_locked.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_more_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_right_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_sizegrip.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_unlocked.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_up_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/light_up_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/images_dark-light/stop.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/VibeDark_Overlay.qss",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/VibeLight_Overlay.qss",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/autohide.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/autohide_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/autohidehover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_closed_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_closed_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_open_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_end_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_closed_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_closed_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_open_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_more_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_vline_OpenDark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_vline_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/branch_vline_open_OpenLight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/close_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/close_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/closehover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/closehover_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_detach.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_down_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_down_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_expand.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_left_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_more_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_right_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_sizegrip.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_up_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/dark_up_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/edithide.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/edithide_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/editshow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/editshow_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/float_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/float_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/floathover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/floathover_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_detach.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_down_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_down_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_expand.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_left_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_more_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_right_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_sizegrip.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_up_arrow.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/light_up_arrow_disabled.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/mode_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/mode_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/modehover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/modehover_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/overlay_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/overlay_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/overlayhover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/overlayhover_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/stop.png",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/taskshow_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/taskshow_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/transparent_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/transparent_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/transparenthover_opendark.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Stylesheets/overlay/transparenthover_openlight.svg",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/ViewProviderFeaturePython.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/Workbench.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Gui/WorkbenchManipulatorPython.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/FreeCADGuiPy.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/MainCmd.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/MainGui.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/MainPy.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/VibeCADPortableLauncher.cpp",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/freecad.rc.cmake",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/freecadCmd.rc.cmake",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/vibecad.ico",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Main/vibecadPortableLauncher.rc.cmake",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/AddonManager",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyLink.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyLinkPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyObject.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyObject.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyObject.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/AssemblyObjectPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/BomObject.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/App/BomObject.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/AssemblyTests/TestCore.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/CommandCreateView.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/JointObject.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Assembly/UtilsAssembly.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/BIM/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestMachine.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathDressupArray.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolAssetStore.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolBitBrowserWidget.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolBitEditorWidget.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolBitListWidget.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolBitPropertyEditorWidget.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolBitSerializer.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolChangeGenerator.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CAMTests/TestPathToolDocumentObjectEditorWidget.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Machine/machines/Generic_3-Axis_GRBL_Router.fcm",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Machine/machines/Generic_LinuxCNC_Mill.fcm",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Machine/models/__init__.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Machine/models/machine.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Machine/models/validation.py",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Base/Generator/toolchange.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Main/Job.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Main/Simulation.py",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Op/Base.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Op/MillFace.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Post/PostList.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Post/Processor.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/Path/Tool/Controller.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathScripts/PathUtils.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/PathSim.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/PathSim.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/PathSim.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/PathSimPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/VolSim.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CAM/PathSimulator/App/VolSim.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Draft/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/App/FemConstraint.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/App/FemConstraintBearing.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/App/FemConstraintTransform.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/App/FemTools.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/App/FemTools.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/femmesh/gmshtools.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/femsolver/calculix/calculixtools.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Fem/femtools/objecttools.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Inspection/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Material/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Mesh/App/Mesh.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Mesh/App/MeshPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Mesh/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/MeshPart/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/OpenSCAD/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/OpenSCAD/Init.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/OpenSCAD/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/App/FeatureChamfer.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/App/FeatureFillet.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/App/FeaturePartBoolean.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/Gui/ViewProviderExt.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/Gui/ViewProviderExt.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Part/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/AppPartDesignPy.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/Feature.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureBoolean.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureDressUp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureFillet.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureHole.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureHole.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureLoft.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureMultiTransform.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureMultiTransform.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureRefine.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureRefine.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureRefinePyImp.cpp",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureThickness.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureTransformed.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/App/FeatureTransformed.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/Gui/TaskDressUpParameters.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/Gui/ViewProvider.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/PartDesign/__init__.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Points/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/ReverseEngineering/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/AppRobot.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/PropertyTrajectory.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/PropertyTrajectory.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/Robot6Axis.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/RobotObject.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/RobotObject.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/RobotObject.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/RobotObjectPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/Trajectory.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/Trajectory.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/Waypoint.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/App/WaypointPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Robot/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Sketcher/App/Constraint.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Sketcher/App/SketchObject.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Sketcher/App/SketchObjectPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Sketcher/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Spreadsheet/App/Sheet.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Spreadsheet/App/SheetPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Spreadsheet/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Spreadsheet/TestSpreadsheet.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Start/Gui/ThemeSelectorWidget.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Surface/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawPage.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawPage.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawPage.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawPagePyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawProjGroup.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawProjGroup.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawProjGroup.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawProjGroupItem.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawProjGroupPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewAnnotation.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewAnnotation.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewDimension.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewDimension.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewDimension.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewDimensionPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewPart.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewPart.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewPart.pyi",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/DrawViewPartPyImp.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/GeometryObject.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/App/GeometryObject.h",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/Gui/QGIViewAnnotation.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/Gui/ViewProviderAnnotation.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/TechDraw/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Test/Document.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "src/Mod/Test/InitGui.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/Init.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/InitGui.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/RUNTIME_VERIFICATION.md",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/TestVibeCAD.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADAssemblyBOM.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADAssemblyHierarchy.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADAuth.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADBuild123d.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADCodex.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADCore.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADDebug.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADDesignReview.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADEditState.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADGeometry.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADGeometryWorker.cpp",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADGrid.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADGui.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADInspection.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADIntentMemory.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADIntentMemoryCompiler.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADModelingSurface.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADOpenSCAD.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADPointArtifacts.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADPreferences.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADProject.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADPromptStarters.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADProvider.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADReferenceContracts.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADScriptedEditor.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADScriptedOwnership.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADScriptedProcess.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADScriptedPublication.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADSession.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADTools.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADTransactions.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADVibeScriptCAM.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADVibeScriptDomainPublication.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADVibeScriptDomainRuntime.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADVibeScriptDomains.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADWorkbenchTools.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/build123d-requirements.txt",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/build123d_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/openscad_freecad_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/preferences-vibecad.svg",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/__init__.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/assembly_add_component.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/assembly_create_assembly.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/assembly_get_assemblies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/assembly_set_component_placement.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/base.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/bim_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/cam_get_jobs.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_activate_workbench.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_capture_view_screenshot.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_create_new_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_delete_object.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_active_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_active_workbench_tool_pack.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_current_freecad_context.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_object_properties.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_report_view_errors.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_selection.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_task_panel.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_tool_shape_report.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_get_view_state.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_active_workbench_commands.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_registered_commands.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_workbench_object_templates.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_workbench_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_workbench_tool_packs.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_list_workbenches.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_open_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_report_tool_shape_gap.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/core_wait_for_user_gui_action.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/draft_create_array.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/draft_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/fem_get_analyses.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/inspection_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/material_apply_appearance.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/material_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/mesh_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/meshpart_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/openscad_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_apply_chamfer.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_apply_fillet.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_apply_thickness.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_create_primitive.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_cut_cylindrical_hole.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_set_placement.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/part_set_primitive_dimensions.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_boolean_bodies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_chamfer_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_create_body.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_create_datum_line.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_create_datum_plane.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_create_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_draft_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_fillet_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_get_bodies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_groove_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_helix_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_hole_from_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_linear_pattern.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_loft_profiles.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_mirror_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_pad_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_pocket_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_polar_pattern.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_revolve_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_set_feature_dimensions.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_sweep_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/partdesign_thickness_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/points_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/reverseengineering_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/robot_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_arc.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_bspline.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_circle.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_constraint.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_ellipse.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_external_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_line.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_point.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_polyline.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_add_slot.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_close_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_angle_between.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_block_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_coincident.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_diameter.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_distance.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_distance_points.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_distance_x.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_distance_y.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_equal.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_horizontal.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_lock_point.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_parallel.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_perpendicular.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_point_on_object.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_point_on_reference.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_radius.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_symmetric.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_tangent.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_constrain_vertical.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_copy_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_create_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_delete_all_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_delete_all_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_delete_constraint.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_delete_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_diagnose_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_draw_rectangle.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_extend_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_fillet_corner.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_get_constraint_by_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_get_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_get_solver_status.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_list_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_list_external_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_list_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_list_reference_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_mirror_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_move_point.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_offset_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_open_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_rectangular_array.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_remove_external_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_resolve_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_constraint_driving.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_constraint_expression.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_constraint_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_constraint_value.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_constraint_value_by_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_construction.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_set_geometry_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_split_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_transform_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_trim_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_validate_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/sketcher_validate_profile_deep.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/spreadsheet_get_sheet.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/surface_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/techdraw_add_view.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/techdraw_create_page.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/provider_tools/techdraw_get_pages.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/requirements.txt",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/__init__.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_add_component.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_create_assembly.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_create_joint.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_get_assemblies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_ground_component.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_insert_component.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_list_structure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_set_component_placement.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/assembly_solve.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_add_window.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_create_spatial_structure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_create_structure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_create_wall.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/bim_list_structure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_create_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_delete_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_edit_source.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_inspect_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_reconfigure_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_set_inputs.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/build123d_set_parameters.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/cam_add_operation.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/cam_add_tool.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/cam_create_job.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/cam_get_jobs.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/cam_list_jobs.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/conversation_ask_user.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/conversation_review_design.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_activate_workbench.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_apply_action.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_capture_view_screenshot.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_clear_local_session.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_create_new_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_delete_object.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_active_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_active_workbench_tool_pack.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_object_properties.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_report_view_errors.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_selection.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_task_panel.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_tool_shape_report.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_get_view_state.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_inspect.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_active_workbench_commands.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_pending_actions.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_registered_commands.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_workbench_object_templates.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_workbench_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_workbench_tool_packs.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_list_workbenches.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_open_document.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_reject_action.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_report_tool_shape_gap.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_run_workbench_command.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_set_view.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_undo_last_vibecad_action.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/core_wait_for_user_gui_action.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/domain_runtime.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_array.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_bspline.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_circle.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_rectangle.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_text.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_create_wire.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/draft_list_objects.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_add_constraint.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_add_material.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_create_analysis.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_get_analyses.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_list_analysis.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_mesh_analysis.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/fem_solve.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/inspection_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/inspection_list_features.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/material_apply_appearance.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/material_apply_material.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/material_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/material_list_materials.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/material_set_appearance.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/mesh_analyze.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/mesh_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/mesh_list_meshes.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/mesh_repair.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/meshpart_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/meshpart_mesh_from_shape.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/meshpart_shape_from_mesh.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_create_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_delete_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_edit_source.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_inspect_model.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_set_conversion_mode.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/openscad_set_parameters.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_apply_chamfer.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_apply_fillet.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_apply_thickness.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_boolean.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_chamfer.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_create_primitive.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_cut_cylindrical_hole.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_extrude.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_fillet.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_find_subelements.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_measure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_mirror.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_revolve.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_set_placement.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/part_set_primitive_dimensions.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_additive_helix.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_additive_loft.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_additive_pipe.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_boolean.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_boolean_bodies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_chamfer.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_chamfer_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_body.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_datum_axis.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_datum_line.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_datum_plane.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_datum_point.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_shape_binder.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_sketch.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_create_subshape_binder.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_draft.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_draft_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_dressup_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_edit_sketch.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_fillet.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_fillet_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_find_subelements.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_get_bodies.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_groove.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_groove_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_helix_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_helix_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_hole.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_hole_from_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_linear_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_linear_pattern.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_loft_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_loft_profiles.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_measure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_mirror.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_mirror_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_multi_transform.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_pad.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_pad_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_pipe_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_pocket.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_pocket_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_polar_pattern.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_reference_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_revolution.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_revolve_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_rotational_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_set_feature_dimensions.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_set_tip.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_subtractive_helix.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_subtractive_loft.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_subtractive_pipe.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_sweep_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_thickness.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_thickness_feature.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_thin_loft.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/partdesign_transform_feature.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/points_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/points_list_clouds.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/reverseengineering_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/robot_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/robot_list_setup.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/spreadsheet_create_sheet.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/spreadsheet_get_sheet.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/spreadsheet_read_sheet.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/spreadsheet_set_cells.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_blend.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_extend.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_fill.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_get_objects.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_loft.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/surface_thicken.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_add_annotation.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_add_dimension.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_add_view.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_create_page.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_get_pages.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/techdraw_list_pages.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/__init__.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_arc.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_bspline.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_circle.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_constraint.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_ellipse.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_external_geometry.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_geometry.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_hole_pattern.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_line.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_point.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_polyline.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_slot.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/add_spline.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/close_sketch.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/common.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_angle_between.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_block_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_coincident.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_common.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_diameter.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_distance.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_distance_points.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_distance_x.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_distance_y.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_equal.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_horizontal.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_lock_point.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_parallel.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_perpendicular.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_point_on_object.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_point_on_reference.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_radius.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_symmetric.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_tangent.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/constrain_vertical.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/copy_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/create_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/delete_all_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/delete_all_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/delete_constraint.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/delete_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/delete_items.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/diagnose_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/draw_rectangle.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/edit_constraint.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/extend_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/fillet_corner.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/get_constraint_by_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/get_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/get_solver_status.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/list_constraints.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/list_external_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/list_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/list_reference_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/measure.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/mirror_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/modify_geometry.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/move_point.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/offset_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/open_sketch.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/rectangular_array.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/remove_external_geometry.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/resolve_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_constraint_driving.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_constraint_expression.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_constraint_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_constraint_value.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_constraint_value_by_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_construction.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/set_geometry_name.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/split_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/transform_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/translate_geometry.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/trim_geometry.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/validate_profile.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/sketcher/validate_profile_deep.py",
+      "status": "D"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-activity.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-new-conversation.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-open-assistant.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-prompt-starters.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-send.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad-stop.svg",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/__init__.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/assembly_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/bim_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/cam_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/conftest.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/domain_vibescript_worker_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/draft_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/fem_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/inspection_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/material_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/mesh_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/meshpart_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/part_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/partdesign_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/partdesign_vibescript_schema_sha256.json",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/points_artifact_ui_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/points_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/qt_domain_worker_heartbeat_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/reverse_engineering_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/robot_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/sketcher_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/spreadsheet_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/surface_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/techdraw_vibescript_api_integration.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_branding_contract.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_codex_subscription.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_edit_state.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_engine_contracts.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_fem_geometry_tool_regressions.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_grid.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_model_context_contract.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_modeling_surface_architecture.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_partdesign_vibescript_v2.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_prompt_starters.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_provider_research_review.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_provider_subprocess.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_scripted_editor_architecture.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_scripted_process.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_tool_surface_guardrails.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_assembly_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_assembly_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_bim_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_bim_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_cam_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_cam_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_domain_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_domain_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_draft_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_draft_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_fem_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_fem_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_inspection_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_inspection_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_material_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_material_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_mesh_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_mesh_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_meshpart_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_meshpart_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_part_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_part_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_partdesign_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_partdesign_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_points_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_points_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_reverse_engineering_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_reverse_engineering_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_robot_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_robot_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_sketcher_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_sketcher_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_spreadsheet_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_spreadsheet_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_surface_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_surface_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_techdraw_api.py",
+      "status": "A"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibescript_techdraw_worker.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "src/Tools/resolve_release_artifact_name.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "src/Tools/tests/test_release_artifact_name.py",
+      "status": "A"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "tests/src/App/AsyncRecompute.cpp",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "tests/src/Gui/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "tests/src/Gui/DockLayoutState.cpp",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/build_vibecad.sh",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/freecad_venv.sh",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/generate_vibecad_brand_assets.py",
+      "status": "A"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_assistant_panel_runtime_audit.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_context_probe.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_direct_tool_shape_critique.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_live_acceptance_matrix.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_live_provider_acceptance.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_open_modify_runtime_audit.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_panel_dock_audit.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_runtime_audit_battery.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_selected_tests.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_sketcher_tool_shape_review.py",
+      "status": "D"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/vibecad_tool_shape_critique.py",
+      "status": "D"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "version.json",
+      "status": "M"
+    }
+  ],
+  "fork_head": "b489a4209d7dda0f5b324b181f492d929816fdda",
+  "history_related": false,
+  "merge_base": null,
+  "schema": "vibecad-upstream-patch-inventory-v1",
+  "snapshot_commit": "80fa22b1a1db769feb50c3737ef24d4bbcbafa58",
+  "upstream_head": "2dc56d2ea3a6128e61397c8f2c9acaff0777fc57",
+  "version": 1,
+  "worktree_file_count": 57,
+  "worktree_files": [
+    {
+      "category": "upstream_core_or_shared",
+      "path": "github/workflows/vibecad-macos.yml",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": ".gitignore",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/rattler-build/osx/create_bundle.sh",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADCore.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADModelingSurface.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADProject.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADProvider.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADSession.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADTransactions.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/__init__.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_model_context_contract.py",
+      "status": "M"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_tool_surface_guardrails.py",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "tests/CMakeLists.txt",
+      "status": "M"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/build_vibecad.sh",
+      "status": "M"
+    },
+    {
+      "category": "upstream_core_or_shared",
+      "path": "data/tests/mesh.obj",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/DECISIONS.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/KNOWN_LIMITATIONS.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/PROJECT_STATUS.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/AI_AGENT_ARCHITECTURE.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/CROSS_PLATFORM_STRATEGY.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/MACOS_ARCHITECTURE.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/SYSTEM_ARCHITECTURE.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/UPSTREAM_PATCH_INVENTORY.json",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/architecture/UPSTREAM_SYNC.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/enterprise/MANAGED_CONFIGURATION.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/enterprise/managed-configuration.schema.json",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/implementation-backlog.json",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/product/PRODUCT_VISION.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/product/USER_EXPERIENCE.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/release/MACOS_ENTERPRISE_DEPLOYMENT.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/release/MACOS_RELEASE.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/security/ENTERPRISE_SECURITY.md",
+      "status": "??"
+    },
+    {
+      "category": "documentation_governance",
+      "path": "docs/security/THREAT_MODEL.md",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/scripts/create_macos_pkg.sh",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/scripts/notarize_macos_artifact.zsh",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "package/scripts/sign_update_manifest.sh",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADAcceptance.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADDesignBrief.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADManagedPolicy.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADRevision.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/VibeCADUpdate.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/tool_impl/service/project_update_design_brief.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/acceptance_freecad_integration.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_acceptance_coordinator.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_design_brief.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_managed_policy.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_native_transactions.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_revision_store.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_session_acceptance_contract.py",
+      "status": "??"
+    },
+    {
+      "category": "vibecad_extension",
+      "path": "src/Mod/VibeCAD/vibecad_tests/test_update_security.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/audit_upstream_delta.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/build_vibecad_selftest.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/generate_release_evidence.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/macos_release_smoke_selftest.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/release_evidence_selftest.py",
+      "status": "??"
+    },
+    {
+      "category": "build_packaging_release",
+      "path": "tools/verify_macos_release.py",
+      "status": "??"
+    }
+  ]
+}

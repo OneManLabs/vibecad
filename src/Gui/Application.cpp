@@ -1038,6 +1038,12 @@ void Application::exportTo(const char* FileName, const char* DocName, const char
 
             std::stringstream str;
             std::set<App::DocumentObject*> unique_objs;
+            str << "import importlib.util\n"
+                << "if importlib.util.find_spec('VibeCADManagedPolicy'):\n"
+                << "    from VibeCADManagedPolicy import enforce_action, load_managed_policy\n"
+                << "    enforce_action(load_managed_policy(), 'export')\n"
+                << "    from VibeCADCore import get_service\n"
+                << "    get_service().authorize('export')\n";
             str << "__objs__ = []\n";
             for (auto it : sel) {
                 if (unique_objs.insert(it).second) {

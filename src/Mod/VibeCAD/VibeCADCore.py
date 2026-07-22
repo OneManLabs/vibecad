@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -207,6 +208,7 @@ class VibeCADService:
         self._project_store = VibeCADProjectStore(self._local_session_id)
         self._modeling_engine_cache_key: tuple[str, str] | None = None
         self._modeling_engine_cache_value: str | None = None
+        self._last_capability_route: dict[str, Any] | None = None
         self._steering_messages: list[dict[str, Any]] = []
         self._steering_sequence = 0
         self._register_core_tools()
@@ -295,6 +297,39 @@ class VibeCADService:
         self._modeling_engine_cache_key = key
         self._modeling_engine_cache_value = engine
         return engine
+
+    def route_modeling_strategy(self, request: str) -> dict[str, Any]:
+        """Select and persist the beginner-facing modeling route for one request."""
+        from VibeCADCapabilityRouter import route_capability
+
+        document = self._active_document()
+        if document is None:
+            raise RuntimeError("No active CAD document is available.")
+        has_geometry = False
+        for obj in list(getattr(document, "Objects", []) or []):
+            shape = getattr(obj, "Shape", None)
+            if shape is not None and not bool(getattr(shape, "isNull", lambda: True)()):
+                has_geometry = True
+                break
+            if any(hasattr(obj, name) for name in ("VibeCADSource", "Build123dSource", "OpenSCADSource")):
+                has_geometry = True
+                break
+        workbench = self.active_workbench_name()
+        state = self.modeling_engine_state(workbench)
+        route = route_capability(
+            request, workbench=workbench, current_engine=state["selected"],
+            available_engines=state["available_engines"],
+            has_existing_geometry=has_geometry,
+        )
+        if route.engine != state["selected"]:
+            self.set_modeling_engine(route.engine)
+        self._last_capability_route = route.summary()
+        self._project_store.set_capability_route(self._last_capability_route)
+        return dict(self._last_capability_route)
+
+    def last_capability_route(self) -> dict[str, Any] | None:
+        route = getattr(self, "_last_capability_route", None)
+        return dict(route) if route else None
 
     def prepare_modeling_engine_read(self) -> dict[str, Any]:
         """Capture the active project key without reading its manifest."""
@@ -1553,6 +1588,8 @@ class VibeCADService:
             "visual_brief",
             "visual_brief_updated_at",
             "downscale_error",
+            "scale_calibration",
+            "scale_error",
         }
         clean = {key: entry.get(key) for key in allowed if key in entry}
         clean["id"] = str(clean.get("id") or uuid.uuid4().hex[:12])
@@ -1560,6 +1597,17 @@ class VibeCADService:
         clean["label"] = str(clean.get("label") or "").strip()
         clean["path"] = str(clean.get("path") or "").strip()
         clean["artifact_role"] = "user_reference"
+        if clean.get("scale_calibration") is not None:
+            try:
+                from VibeCADImageCalibration import validate_calibration
+
+                clean["scale_calibration"] = validate_calibration(
+                    clean["scale_calibration"]
+                )
+                clean.pop("scale_error", None)
+            except Exception as exc:
+                clean.pop("scale_calibration", None)
+                clean["scale_error"] = f"Stored image scale is invalid: {exc}"
         return clean
 
     def _load_reference_images_for_active_project(self) -> None:
@@ -1609,11 +1657,16 @@ class VibeCADService:
                     if isinstance(item, dict)
                 ][-MAX_REFERENCE_IMAGES:],
             }
-            tmp = path.with_name(f"{path.name}.tmp")
-            tmp.write_text(
-                json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-            )
-            tmp.replace(path)
+            tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                with tmp.open("w", encoding="utf-8", newline="\n") as stream:
+                    json.dump(payload, stream, indent=2, sort_keys=True)
+                    stream.write("\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(tmp, path)
+            finally:
+                tmp.unlink(missing_ok=True)
             self._reference_cache_key = str(path)
             self._reference_cache_document_uid = self._active_document_uid()
         except Exception as exc:
@@ -1763,6 +1816,85 @@ class VibeCADService:
             "count": len(self._reference_images),
             "images": [dict(entry) for entry in self._reference_images],
         }
+
+    def calibrate_reference_image(
+        self,
+        reference_id: str,
+        *,
+        known_length: float,
+        known_unit: str,
+        pixel_distance: float,
+    ) -> dict[str, Any]:
+        from VibeCADImageCalibration import create_calibration
+
+        ident = str(reference_id or "").strip()
+        if not ident:
+            return {"ok": False, "error": "Reference image id cannot be empty."}
+        self._load_reference_images_for_active_project()
+        entry = next(
+            (
+                item
+                for item in self._reference_images
+                if item.get("id") == ident or item.get("name") == ident
+            ),
+            None,
+        )
+        if entry is None:
+            return {"ok": False, "error": f"No attached reference image matches '{ident}'."}
+        try:
+            calibration = create_calibration(
+                known_length=known_length,
+                known_unit=known_unit,
+                pixel_distance=pixel_distance,
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        prior_calibration = entry.get("scale_calibration")
+        prior_error = entry.get("scale_error")
+        entry["scale_calibration"] = calibration
+        entry.pop("scale_error", None)
+        try:
+            self._write_reference_images()
+        except Exception as exc:
+            if prior_calibration is None:
+                entry.pop("scale_calibration", None)
+            else:
+                entry["scale_calibration"] = prior_calibration
+            if prior_error is None:
+                entry.pop("scale_error", None)
+            else:
+                entry["scale_error"] = prior_error
+            return {"ok": False, "error": f"Could not save image scale: {exc}"}
+        return {
+            "ok": True,
+            "reference_id": entry["id"],
+            "calibration": dict(calibration),
+        }
+
+    def estimate_reference_dimension(
+        self, reference_id: str, *, pixel_distance: float
+    ) -> dict[str, Any]:
+        from VibeCADImageCalibration import estimate_dimension
+
+        ident = str(reference_id or "").strip()
+        self._load_reference_images_for_active_project()
+        entry = next(
+            (
+                item
+                for item in self._reference_images
+                if item.get("id") == ident or item.get("name") == ident
+            ),
+            None,
+        )
+        if entry is None:
+            return {"ok": False, "error": f"No attached reference image matches '{ident}'."}
+        try:
+            estimate = estimate_dimension(
+                pixel_distance, entry.get("scale_calibration")
+            )
+        except (RuntimeError, ValueError) as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "reference_id": entry["id"], "estimate": estimate}
 
     def pending_reference_image_attachments(self) -> dict[str, Any]:
         """Return only images attached by the human since their last delivery.
@@ -3883,6 +4015,294 @@ class VibeCADService:
     def project_context(self) -> dict[str, Any]:
         return self._project_store.context()
 
+    def revision_timeline(self) -> list[dict[str, Any]]:
+        return self._project_store.revision_timeline()
+
+    def compare_revisions(self, left_revision: str, right_revision: str) -> dict[str, Any]:
+        return self._project_store.compare_revisions(left_revision, right_revision)
+
+    def export_revision_report(
+        self, target: str | Path, revision_ids: list[str] | None = None
+    ) -> dict[str, Any]:
+        self.authorize("export")
+        result = self._project_store.export_revision_report(target, revision_ids)
+        self.record_audit_event(
+            category="export",
+            action="revision_report",
+            outcome="accepted",
+            actor_type="user",
+            details={
+                "revision_count": len(result.get("revision_ids") or []),
+                "content_sha256": result.get("content_sha256"),
+            },
+        )
+        return result
+
+    def create_revision_branch(
+        self, revision_id: str, target: str | Path
+    ) -> dict[str, Any]:
+        self.authorize("design.modify")
+        self.authorize("export")
+        result = self._project_store.create_revision_branch(revision_id, target)
+        self.record_audit_event(
+            category="revision",
+            action="create_branch",
+            outcome="accepted",
+            actor_type="user",
+            details={
+                "source_revision": result.get("source_revision"),
+                "document_sha256": result.get("source_document_sha256"),
+            },
+        )
+        return result
+
+    def record_audit_event(
+        self,
+        *,
+        category: str,
+        action: str,
+        outcome: str,
+        details: dict[str, Any] | None = None,
+        actor_type: str = "application",
+    ) -> dict[str, Any]:
+        from VibeCADAudit import VibeCADAuditStore
+
+        scope = self.project_scope_snapshot()
+        try:
+            principal = self.enterprise_principal()
+            actor = {
+                "actor_id": principal["actor_id"],
+                "organization_id": principal["organization_id"],
+                "roles": principal["roles"],
+                "identity_status": "resolved",
+            }
+        except Exception:
+            try:
+                from VibeCADManagedPolicy import load_managed_policy
+
+                organization = str(load_managed_policy().get("organization_id") or "unresolved")
+            except Exception:
+                organization = "unresolved"
+            identity = json.dumps(
+                [organization, "unresolved-identity"], separators=(",", ":")
+            ).encode("utf-8")
+            actor = {
+                "actor_id": hashlib.sha256(identity).hexdigest(),
+                "organization_id": organization,
+                "roles": [],
+                "identity_status": "unresolved",
+            }
+        safe_details = dict(details or {})
+        safe_details.update(actor)
+        store = VibeCADAuditStore(scope["root"], str(scope["project_id"]))
+        event = store.record(
+            category=category,
+            action=action,
+            outcome=outcome,
+            details=safe_details,
+            actor_type=actor_type,
+        )
+        try:
+            from VibeCADAudit import apply_managed_retention
+            from VibeCADManagedPolicy import load_managed_policy
+
+            apply_managed_retention(store, load_managed_policy())
+        except Exception:
+            # The event is durable. A later check can retry archive promotion.
+            pass
+        return event
+
+    def audit_events(self) -> list[dict[str, Any]]:
+        from VibeCADAudit import VibeCADAuditStore
+
+        scope = self.project_scope_snapshot()
+        return VibeCADAuditStore(
+            scope["root"], str(scope["project_id"])
+        ).list_events()
+
+    def export_audit_report(self, path: str | Path) -> dict[str, Any]:
+        from VibeCADAudit import VibeCADAuditStore
+        from VibeCADAuditReport import export_signed_audit_report
+        from VibeCADManagedPolicy import enforce_action, load_managed_policy
+
+        policy = load_managed_policy()
+        enforce_action(policy, "export")
+        self.authorize("audit.view")
+        self.authorize("export")
+        principal = self.enterprise_principal()
+        scope = self.project_scope_snapshot()
+        store = VibeCADAuditStore(scope["root"], str(scope["project_id"]))
+        try:
+            report = export_signed_audit_report(
+                path, store, organization_id=principal["organization_id"],
+                expected_signer_fingerprint=str(policy.get("audit_report_signer_fingerprint") or ""),
+            )
+        except Exception as exc:
+            self.record_audit_event(
+                category="audit", action="report_export", outcome="failed",
+                actor_type="user", details={"error_type": type(exc).__name__},
+            )
+            raise
+        self.record_audit_event(
+            category="audit", action="report_export", outcome="success",
+            actor_type="user", details={
+                "report_id": report["report_id"],
+                "event_count": report["event_count"],
+            },
+        )
+        return report
+
+    def collect_audit_report(self) -> dict[str, Any]:
+        """Send one signed report and retain the signed collector receipt."""
+        from VibeCADAudit import VibeCADAuditStore
+        from VibeCADAuditCollector import store_audit_receipt, upload_audit_report
+        from VibeCADAuditReport import create_signed_audit_report
+        from VibeCADManagedPolicy import load_managed_policy
+
+        policy = load_managed_policy()
+        if not policy.get("managed") or not policy.get("audit_collection_enabled"):
+            raise RuntimeError("Managed audit collection is not enabled.")
+        self.authorize("policy.manage")
+        principal = self.enterprise_principal()
+        scope = self.project_scope_snapshot()
+        store = VibeCADAuditStore(scope["root"], str(scope["project_id"]))
+        report = create_signed_audit_report(
+            store, organization_id=principal["organization_id"],
+            expected_signer_fingerprint=str(policy.get("audit_report_signer_fingerprint") or ""),
+        )
+        try:
+            receipt = upload_audit_report(report, policy)
+            store_audit_receipt(scope["root"], receipt)
+        except Exception as exc:
+            self.record_audit_event(
+                category="audit", action="central_collection", outcome="failed",
+                actor_type="user", details={"error_type": type(exc).__name__},
+            )
+            raise
+        self.record_audit_event(
+            category="audit", action="central_collection", outcome="accepted",
+            actor_type="user", details={"report_id": report["report_id"]},
+        )
+        return receipt
+
+    def enterprise_principal(self) -> dict[str, Any]:
+        from VibeCADIdentity import principal_from_policy
+        from VibeCADManagedPolicy import load_managed_policy
+
+        policy = load_managed_policy()
+        mode = policy.get("identity_mode")
+        if policy.get("managed") and mode == "oidc":
+            from VibeCADFederatedIdentity import resolve_oidc_principal
+
+            principal = resolve_oidc_principal(policy)
+        elif policy.get("managed") and mode == "saml":
+            from VibeCADSAMLIdentity import resolve_saml_principal
+
+            principal = resolve_saml_principal(policy)
+        else:
+            principal = principal_from_policy(policy)
+        if policy.get("managed"):
+            from VibeCADOrganization import VibeCADOrganizationStore
+
+            organization_root = Path(App.getUserAppDataDir()) / "VibeCAD" / "enterprise"
+            if policy.get("scim_enabled"):
+                from VibeCADSCIM import VibeCADSCIMStore, apply_scim_assignment
+
+                assignment = VibeCADSCIMStore(
+                    organization_root, principal["organization_id"]
+                ).get(principal["actor_id"])
+                principal = apply_scim_assignment(principal, assignment)
+            VibeCADOrganizationStore(organization_root).provision(principal)
+        return principal
+
+    def sync_scim_roles(self, subject: str) -> dict[str, Any]:
+        from VibeCADManagedPolicy import load_managed_policy
+        from VibeCADSCIM import VibeCADSCIMStore, sync_scim_subject
+
+        policy = load_managed_policy()
+        if not policy.get("managed") or not policy.get("scim_enabled"):
+            raise RuntimeError("Managed SCIM provisioning is not enabled.")
+        root = Path(App.getUserAppDataDir()) / "VibeCAD" / "enterprise"
+        assignment = sync_scim_subject(
+            policy, subject,
+            VibeCADSCIMStore(root, str(policy.get("organization_id") or "managed")),
+        )
+        self.record_audit_event(
+            category="identity", action="scim_sync",
+            outcome="active" if assignment["active"] else "deactivated",
+            actor_type="application",
+            details={"roles": assignment["roles"], "assignment_id": assignment["assignment_id"]},
+        )
+        return assignment
+
+    def sync_managed_policy(self) -> dict[str, Any]:
+        """Fetch and atomically promote one signed organization-policy bundle."""
+        from VibeCADManagedPolicy import load_managed_policy
+        from VibeCADPolicyBundle import PolicyBundleStore, sync_policy_bundle
+
+        bootstrap = load_managed_policy(resolve_bundle=False)
+        if not bootstrap.get("managed") or not bootstrap.get("policy_bundle_enabled"):
+            raise RuntimeError("Managed policy bundle synchronization is not enabled.")
+        root = Path.home() / "Library" / "Application Support" / "VibeCAD"
+        bundle = sync_policy_bundle(
+            bootstrap, PolicyBundleStore(root, bootstrap["organization_id"])
+        )
+        self.record_audit_event(
+            category="administration", action="policy_bundle_sync", outcome="accepted",
+            actor_type="application", details={
+                "sequence": bundle["sequence"],
+                "expires_at": bundle["expires_at"],
+            },
+        )
+        return bundle
+
+    def authorize(self, permission: str) -> None:
+        from VibeCADIdentity import authorize
+
+        try:
+            authorize(self.enterprise_principal(), permission)
+        except PermissionError:
+            self.record_audit_event(
+                category="authorization",
+                action=permission,
+                outcome="blocked",
+                actor_type="user",
+                details={"permission": permission},
+            )
+            raise
+
+    def recover_open_document_acceptance(self) -> list[dict[str, Any]]:
+        """Recover interrupted acceptance after FreeCAD restores a saved document."""
+        scope = self.project_scope_snapshot()
+        document = scope.get("document") or {}
+        file_path = str(document.get("file_path") or "").strip()
+        if not file_path:
+            return []
+        from VibeCADAcceptance import VibeCADAcceptanceCoordinator
+
+        coordinator = VibeCADAcceptanceCoordinator(
+            scope["root"], str(scope["project_id"])
+        )
+        if not coordinator.directory.is_dir():
+            return []
+
+        def restore_live(_path: Path) -> None:
+            doc = self._active_document()
+            if doc is None:
+                raise RuntimeError("The active CAD document is not available for recovery.")
+            doc.restore()
+            doc.recompute()
+
+        def write_metadata(revision_id: str | None) -> None:
+            VibeCADProjectStore.write_accepted_revision_metadata(
+                scope["manifest_path"], str(scope["project_id"]), revision_id
+            )
+
+        return coordinator.recover_incomplete(
+            restore_live=restore_live,
+            write_metadata=write_metadata,
+        )
+
     def project_scope_snapshot(self) -> dict[str, Any]:
         """Return document-derived project identity without artifact I/O."""
 
@@ -3946,6 +4366,12 @@ class VibeCADService:
 
     def intent_memory(self) -> dict[str, Any]:
         return self._project_store.intent_memory()
+
+    def design_brief(self) -> dict[str, Any]:
+        return self._project_store.ensure_design_brief()
+
+    def apply_design_brief_update(self, update: dict[str, Any]) -> dict[str, Any]:
+        return self._project_store.apply_design_brief_update(update)
 
     def intent_memory_snapshot(self) -> dict[str, Any]:
         memory = self.intent_memory()
@@ -5003,13 +5429,28 @@ class VibeCADService:
         }
         if not modeling_surface.available:
             surface["unavailable_reason"] = modeling_surface.unavailable_reason
+        brief = self.design_brief()
+        provider_brief = {
+            key: brief[key]
+            for key in (
+                "schema", "version", "revision", "purpose", "units",
+                "critical_dimensions", "named_parameters", "symmetry",
+                "mating_parts", "clearances", "materials", "loads",
+                "manufacturing_process", "tolerances", "surface_requirements",
+                "environmental_requirements", "unresolved_decisions",
+                "assumptions", "user_preferences", "validation_requirements",
+            )
+            if key in brief
+        }
         return {
             "workbench": active_workbench,
             "modeling_surface": surface,
+            "capability_route": self.last_capability_route(),
             "document": self.provider_turn_document_summary(),
             "selection": self.provider_turn_selection_summary(),
             "view_screenshot": self.view_screenshot_summary(),
             "reference_images": self.pending_reference_image_attachments(),
+            "design_brief": provider_brief,
         }
 
     def _register_core_tools(self) -> None:

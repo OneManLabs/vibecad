@@ -92,7 +92,7 @@ def test_complete_native_and_vibescript_surface_matrix() -> None:
                 and not name.endswith(".inspect_program")
             )
             assert len(scripted.cad_tool_names) == 5
-            assert len(scripted.tool_names) <= 11
+            assert len(scripted.tool_names) == len(CORE_CONVERSATION_VIEW_TOOLS) + 5
             assert "core.inspect" in scripted.tool_names
             assert not set(scripted.tool_names) & set(HIDDEN_PROVIDER_INSPECTION_TOOLS)
             assert set(native_pack.tool_names).isdisjoint(
@@ -3786,3 +3786,25 @@ def test_gui_document_observer_ignores_properties_restored_from_file(
     gui._VibeCADDocumentObserver().slotChangedObject(object(), "Shape")
 
     assert observed == []
+
+
+def test_gui_document_observer_recovers_interrupted_acceptance_on_open(monkeypatch) -> None:
+    import VibeCADGui as gui
+
+    calls = []
+    refreshed = []
+
+    class Service:
+        def recover_open_document_acceptance(self):
+            calls.append("recover")
+            return [{"acceptance_id": "interrupted"}]
+
+    monkeypatch.setattr(gui, "get_service", lambda: Service())
+    monkeypatch.setattr(gui, "_warn", lambda message: calls.append(message))
+    monkeypatch.setattr(
+        gui, "_schedule_assistant_document_refresh", lambda: refreshed.append(True)
+    )
+    gui._VibeCADDocumentObserver().slotRestoredDocument(object())
+    assert calls[0] == "recover"
+    assert "last accepted revision" in calls[1]
+    assert refreshed == [True]

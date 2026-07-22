@@ -170,6 +170,14 @@ int PropertyPostDataObject::getDataType()
 PyObject* PropertyPostDataObject::getPyObject()
 {
 #ifdef FC_USE_VTK_PYTHON
+    // A fresh headless process may not have registered the VTK data-model
+    // Python wrappers. Without this import vtkPythonUtil returns null for a
+    // valid native object that was restored from the document archive.
+    PyObject* dataModelModule = PyImport_ImportModule("vtkmodules.vtkCommonDataModel");
+    if (!dataModelModule) {
+        return nullptr;
+    }
+    Py_DECREF(dataModelModule);
     // create a copy first
     auto copy = static_cast<PropertyPostDataObject*>(Copy());
 
@@ -436,7 +444,10 @@ void PropertyPostDataObject::SaveDocFile(Base::Writer& writer) const
         zipios::ZipOutputStream ZipWriter(fi.filePath());
         ZipWriter.putNextEntry("dummy");  // need to add a dummy first, as the read stream preloads
                                           // the first entry, and we cannot get the file name...
-        add_to_zip(datafolder, datafolder.filePath().length(), ZipWriter);
+        // Store relative entry names. A leading separator creates an
+        // absolute-style ZIP member. Readers can reject or strip that
+        // separator and then restore the data to the wrong path.
+        add_to_zip(datafolder, datafolder.filePath().length() + 1, ZipWriter);
         ZipWriter.close();
         datafolder.deleteDirectoryRecursive();
     }
@@ -505,7 +516,19 @@ void PropertyPostDataObject::RestoreDocFile(Base::Reader& reader)
             try {
                 zipios::ConstEntryPointer entry = ZipReader.getNextEntry();
                 while (entry->isValid()) {
-                    Base::FileInfo entry_path(fo.filePath() + entry->getName());
+                    std::string entry_name = entry->getName();
+                    // Read legacy archives that used a leading separator, but
+                    // never permit an archive member to escape the temporary
+                    // extraction directory.
+                    while (!entry_name.empty()
+                           && (entry_name.front() == '/' || entry_name.front() == '\\')) {
+                        entry_name.erase(entry_name.begin());
+                    }
+                    if (entry_name.empty() || entry_name.find("..") != std::string::npos
+                        || entry_name.find('\\') != std::string::npos) {
+                        throw Base::ValueError("Unsafe FEM post-data archive member");
+                    }
+                    Base::FileInfo entry_path(fo.filePath() + "/" + entry_name);
                     if (entry->isDirectory()) {
                         // seems not to be called
                         entry_path.createDirectories();

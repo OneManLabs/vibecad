@@ -20,6 +20,38 @@ python ../scripts/relocate_conda_environment.py \
     "${default_env_absolute}" \
     "${conda_env_absolute}"
 
+# The public key and endpoint configuration become part of the signed app.
+# Development builds omit them and the update client fails closed.
+if [[ -n "${VIBECAD_UPDATE_PUBLIC_KEY_PATH:-}" ]]; then
+    [[ -f "${VIBECAD_UPDATE_PUBLIC_KEY_PATH}" ]] || {
+        echo "VIBECAD_UPDATE_PUBLIC_KEY_PATH does not name a file" >&2
+        exit 2
+    }
+    metadata_base="${VIBECAD_UPDATE_METADATA_BASE_URL:?VIBECAD_UPDATE_METADATA_BASE_URL is required with an update public key}"
+    mkdir -p "${module_directory}"
+    cp "${VIBECAD_UPDATE_PUBLIC_KEY_PATH}" "${module_directory}/update-public.pem"
+    "${conda_env}/bin/python" - \
+        "${module_directory}/update-config.json" \
+        "${metadata_base%/}" \
+        "${VIBECAD_UPDATE_CHANNEL:-stable}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+destination = Path(sys.argv[1])
+base = sys.argv[2]
+channel = sys.argv[3]
+destination.write_text(json.dumps({
+    "schema": "vibecad-update-config-v1",
+    "version": 1,
+    "manifest_url": f"{base}/vibecad-macos-update.json",
+    "signature_url": f"{base}/vibecad-macos-update.json.sig",
+    "public_key": "update-public.pem",
+    "channel": channel,
+}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+fi
+
 ../scripts/install_vibecad_provider_deps.sh "${conda_env}"
 ../scripts/install_vibecad_build123d_runtime.sh \
     "${conda_env}/bin/python" \
@@ -255,6 +287,39 @@ fi
 
 # create hash
 sha256sum ${version_name}.dmg > ${version_name}.dmg-SHA256.txt
+
+# Create the enterprise installer. Development builds are unsigned packages;
+# production builds require a Developer ID Installer identity and notarization.
+pkg_name="${version_name}.pkg"
+pkg_args=(
+    --app "${app_name}"
+    --output "${pkg_name}"
+    --version "${short_version}"
+    --identifier "com.vibecad.desktop"
+)
+if [[ "${MACOS_SIGN_RELEASE:-false}" == "true" ]]; then
+    pkg_args+=(--sign "${MACOS_INSTALLER_SIGNING_KEY_ID:?MACOS_INSTALLER_SIGNING_KEY_ID is required for production PKG signing}")
+fi
+../../scripts/create_macos_pkg.sh "${pkg_args[@]}"
+if [[ "${MACOS_SIGN_RELEASE:-false}" == "true" ]]; then
+    ../../scripts/notarize_macos_artifact.zsh \
+        --artifact "${pkg_name}" \
+        --keychain-profile "${MACOS_KEYCHAIN_PROFILE:-VibeCAD}"
+fi
+sha256sum "${pkg_name}" > "${pkg_name}-SHA256.txt"
+
+evidence_dir="${version_name}-release-evidence"
+python3 ../../../tools/generate_release_evidence.py \
+    --artifact "${version_name}.dmg" \
+    --artifact "${pkg_name}" \
+    --packages "${app_name}/Contents/packages.txt" \
+    --output-dir "${evidence_dir}" \
+    --source-uri "${VIBECAD_SOURCE_URI:-https://github.com/10-X-eng/vibecad}" \
+    --source-sha "${VIBECAD_SOURCE_SHA:-$(git -C ../../.. rev-parse HEAD)}" \
+    --builder-id "${VIBECAD_BUILDER_ID:-local-macos-builder}" \
+    --version "${short_version}" \
+    --channel "${VIBECAD_UPDATE_CHANNEL:-development}" \
+    --download-base-url "${VIBECAD_DOWNLOAD_BASE_URL:-}"
 
 if [[ "${UPLOAD_RELEASE:-false}" == "true" ]]; then
     for attempt in 1 2 3 4 5; do

@@ -189,6 +189,12 @@ class ObjectTools(ABC):
 
     def process_diagnostics(self):
         """Return exact external-process state without consuming output."""
+        # A GUI event loop normally delivers the QProcess finished signal.
+        # Headless workers and CLI tests can poll without such an event loop.
+        # A zero-time wait refreshes an already-finished child and dispatches
+        # its completion callback without delaying the caller.
+        if self.process.state() != QProcess.ProcessState.NotRunning:
+            self.process.waitForFinished(0)
         self._read_stdout()
         self._read_stderr()
         process_state = self.process.state()

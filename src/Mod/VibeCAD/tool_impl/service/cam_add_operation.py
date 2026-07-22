@@ -670,9 +670,8 @@ def run(
     native_result = transaction.get("result", {})
     if result.get("ok"):
         result["next_action"] = (
-            "Verify the toolpath visually with a screenshot, then add the "
-            "next operation. G-code postprocessing to a file is left to "
-            "the user in the FreeCAD GUI."
+            "Verify the toolpath visually, then add the next operation or "
+            "use cam.postprocess to create controlled machine output."
         )
     elif native_result.get("error"):
         result["error"] = native_result["error"]

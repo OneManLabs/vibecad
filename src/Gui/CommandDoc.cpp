@@ -41,6 +41,7 @@
 #include <App/GeoFeature.h>
 #include <Base/Exception.h>
 #include <Base/FileInfo.h>
+#include <Base/Interpreter.h>
 #include <Base/Stream.h>
 #include <Base/Tools.h>
 
@@ -456,6 +457,29 @@ QString createDefaultExportBasename()
 void StdCmdExport::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
+
+    try {
+        Base::Interpreter().runString(
+            "import importlib.util\n"
+            "if importlib.util.find_spec('VibeCADManagedPolicy'):\n"
+            "    from VibeCADManagedPolicy import enforce_action, load_managed_policy\n"
+            "    enforce_action(load_managed_policy(), 'export')\n"
+            "    from VibeCADCore import get_service\n"
+            "    get_service().authorize('export')\n"
+        );
+    }
+    catch (Py::Exception&) {
+        PyErr_Clear();
+        QMessageBox::warning(
+            Gui::getMainWindow(),
+            QCoreApplication::translate("StdCmdExport", "Export Blocked"),
+            QCoreApplication::translate(
+                "StdCmdExport",
+                "Your organization policy does not permit this export."
+            )
+        );
+        return;
+    }
 
     auto selection = Gui::Selection().getObjectsOfType(App::DocumentObject::getClassTypeId());
     if (selection.empty()) {

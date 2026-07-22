@@ -22,13 +22,15 @@ on:
         required: true
         default: false
         type: boolean
+      sign_release:
+        description: "Use production Developer ID signing and Apple notarization."
+        required: true
+        default: false
+        type: boolean
       release_tag:
         description: "Optional release tag. Leave empty for vibecad-macos-YYYYMMDD-SHA."
         required: false
         type: string
-
-permissions:
-  contents: write
 
 concurrency:
   group: vibecad-macos-${{ inputs.source_ref }}-${{ inputs.architecture }}
@@ -41,8 +43,11 @@ jobs:
   prepare:
     name: Prepare macOS Build
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       source_sha: ${{ steps.meta.outputs.source_sha }}
+      release_version: ${{ steps.meta.outputs.release_version }}
       build_tag: ${{ steps.meta.outputs.build_tag }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       matrix: ${{ steps.meta.outputs.matrix }}
@@ -68,6 +73,13 @@ jobs:
           source_sha="$(git rev-parse HEAD)"
           if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Could not resolve ${SOURCE_REF} to a commit: ${source_sha}" >&2
+            exit 1
+          fi
+
+          version_output="$(python3 package/rattler-build/scripts/resolve_macos_bundle_version.py version.json)"
+          release_version="${version_output%%|*}"
+          if [[ ! "${release_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not resolve the release version: ${release_version}" >&2
             exit 1
           fi
 
@@ -99,6 +111,7 @@ jobs:
           esac
 
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+          echo "release_version=${release_version}" >> "${GITHUB_OUTPUT}"
           echo "build_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
@@ -116,6 +129,8 @@ jobs:
   macos:
     name: macOS ${{ matrix.arch }} DMG
     needs: prepare
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -157,6 +172,14 @@ jobs:
           restore-keys: |
             ccache-${{ matrix.target }}-
 
+      - name: Remove restored local package products
+        shell: bash
+        working-directory: package/rattler-build
+        run: |
+          set -euo pipefail
+          rm -rf -- .pixi/envs/default .pixi/envs/package
+          pixi clean --build
+
       - name: Build package environment
         shell: bash
         working-directory: package/rattler-build
@@ -168,6 +191,14 @@ jobs:
           set -euo pipefail
           pixi install -e default
           pixi install -e package
+
+      - name: Verify installed VibeCAD source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/verify_vibecad_source_identity.py \
+            --source src/Mod/VibeCAD \
+            --installed package/rattler-build/.pixi/envs/default/Mod/VibeCAD
 
       - name: Save ccache
         if: always()
@@ -204,6 +235,39 @@ jobs:
           echo "Runner disk space available for macOS packaging:"
           df -h .
 
+      - name: Configure production signing and notarization
+        if: ${{ inputs.sign_release }}
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.MACOS_CI_KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+          UPDATE_SIGNING_KEY_BASE64: ${{ secrets.MACOS_UPDATE_SIGNING_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in CERTIFICATE_P12_BASE64 CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD UPDATE_SIGNING_KEY_BASE64; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Required production signing secret is missing: ${name}" >&2
+              exit 1
+            fi
+          done
+          certificate="${RUNNER_TEMP}/vibecad-signing.p12"
+          keychain="${RUNNER_TEMP}/vibecad-signing.keychain-db"
+          printf '%s' "${CERTIFICATE_P12_BASE64}" | base64 --decode > "${certificate}"
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${keychain}"
+          security set-keychain-settings -lut 21600 "${keychain}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${keychain}"
+          security import "${certificate}" -P "${CERTIFICATE_PASSWORD}" -A -t cert -f pkcs12 -k "${keychain}"
+          security list-keychains -d user -s "${keychain}" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${KEYCHAIN_PASSWORD}" "${keychain}"
+          xcrun notarytool store-credentials VibeCAD-CI \
+            --apple-id "${APPLE_ID}" --team-id "${APPLE_TEAM_ID}" \
+            --password "${APPLE_APP_PASSWORD}" --keychain "${keychain}"
+          echo "VIBECAD_CI_KEYCHAIN=${keychain}" >> "${GITHUB_ENV}"
+
       - name: Create and validate VibeCAD DMG
         timeout-minutes: 120
         shell: bash
@@ -211,11 +275,165 @@ jobs:
         env:
           BUILD_TAG: ${{ needs.prepare.outputs.build_tag }}
           MACOS_DEPLOYMENT_TARGET: "12.0"
-          MACOS_SIGN_RELEASE: "false"
+          MACOS_SIGN_RELEASE: ${{ inputs.sign_release && 'true' || 'false' }}
+          MACOS_SIGNING_KEY_ID: ${{ secrets.MACOS_SIGNING_KEY_ID }}
+          MACOS_INSTALLER_SIGNING_KEY_ID: ${{ secrets.MACOS_INSTALLER_SIGNING_KEY_ID }}
+          MACOS_KEYCHAIN_PROFILE: ${{ inputs.sign_release && 'VibeCAD-CI' || 'VibeCAD' }}
+          VIBECAD_SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          VIBECAD_SOURCE_URI: https://github.com/${{ github.repository }}
+          VIBECAD_BUILDER_ID: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          VIBECAD_UPDATE_CHANNEL: prerelease
+          VIBECAD_DOWNLOAD_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}
+          VIBECAD_UPDATE_METADATA_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}
+          UPDATE_SIGNING_KEY_BASE64: ${{ secrets.MACOS_UPDATE_SIGNING_KEY_BASE64 }}
           UPLOAD_RELEASE: "false"
         run: |
           set -euo pipefail
+          if [[ "${{ inputs.sign_release }}" == "true" ]]; then
+            update_private_key="${RUNNER_TEMP}/vibecad-update-signing-for-bundle.pem"
+            update_public_key="${RUNNER_TEMP}/vibecad-update-public.pem"
+            printf '%s' "${UPDATE_SIGNING_KEY_BASE64}" | base64 --decode > "${update_private_key}"
+            openssl pkey -in "${update_private_key}" -pubout -out "${update_public_key}"
+            export VIBECAD_UPDATE_PUBLIC_KEY_PATH="${update_public_key}"
+          fi
           pixi run -e package create_bundle
+
+      - name: Sign update metadata
+        if: ${{ inputs.sign_release }}
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY_BASE64: ${{ secrets.MACOS_UPDATE_SIGNING_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          key="${RUNNER_TEMP}/vibecad-update-signing.pem"
+          printf '%s' "${UPDATE_SIGNING_KEY_BASE64}" | base64 --decode > "${key}"
+          manifest=(package/rattler-build/osx/VibeCAD-*-release-evidence/vibecad-macos-update.json)
+          package/scripts/sign_update_manifest.sh "${manifest[0]}" "${key}" "${manifest[0]}.sig"
+          openssl pkey -in "${key}" -pubout -out "${RUNNER_TEMP}/update-public.pem"
+          openssl base64 -d -A -in "${manifest[0]}.sig" -out "${RUNNER_TEMP}/update-signature.bin"
+          openssl dgst -sha256 -verify "${RUNNER_TEMP}/update-public.pem" \
+            -signature "${RUNNER_TEMP}/update-signature.bin" "${manifest[0]}"
+
+      - name: Verify macOS release contents
+        shell: bash
+        env:
+          EXPECTED_APPLICATION_NAME: VibeCAD
+          EXPECTED_RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+          EXPECTED_SOURCE_URI: https://github.com/${{ github.repository }}
+          EXPECTED_SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          EXPECTED_BUILDER_ID: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EXPECTED_BUILD_TYPE: https://vibecad.dev/build-types/macos-release/v1
+          EXPECTED_UPDATE_CHANNEL: prerelease
+        run: |
+          set -euo pipefail
+          dmg=(package/rattler-build/osx/VibeCAD-*.dmg)
+          pkg=(package/rattler-build/osx/VibeCAD-*.pkg)
+          evidence=(package/rattler-build/osx/VibeCAD-*-release-evidence)
+          production=()
+          if [[ "${{ inputs.sign_release }}" == "true" ]]; then
+            production+=(--production)
+          fi
+          python3 tools/verify_macos_release.py \
+            --dmg "${dmg[0]}" --pkg "${pkg[0]}" \
+            --evidence-dir "${evidence[0]}" \
+            --expected-application-name "${EXPECTED_APPLICATION_NAME}" \
+            --expected-release-version "${EXPECTED_RELEASE_VERSION}" \
+            --expected-source-uri "${EXPECTED_SOURCE_URI}" \
+            --expected-source-sha "${EXPECTED_SOURCE_SHA}" \
+            --expected-builder-id "${EXPECTED_BUILDER_ID}" \
+            --expected-build-type "${EXPECTED_BUILD_TYPE}" \
+            --expected-update-channel "${EXPECTED_UPDATE_CHANNEL}" \
+            "${production[@]}"
+
+      - name: Install and test generated macOS package
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          installed_app="/Applications/VibeCAD.app"
+          install_marker="${RUNNER_TEMP}/vibecad-clean-install-owned"
+          smoke_root="${RUNNER_TEMP}/vibecad-clean-install-smoke"
+          packages=(package/rattler-build/osx/VibeCAD-*.pkg)
+          if [[ "${#packages[@]}" -ne 1 || ! -f "${packages[0]}" ]]; then
+            echo "Expected exactly one generated VibeCAD PKG." >&2
+            exit 1
+          fi
+          if [[ -e "${installed_app}" || -e "${install_marker}" || -e "${smoke_root}" ]]; then
+            echo "The clean-machine test target already exists." >&2
+            exit 1
+          fi
+          mkdir -p "${smoke_root}"
+          /usr/bin/touch "${install_marker}"
+          sudo /usr/sbin/installer -pkg "${packages[0]}" -target /
+          app_count="$(find /Applications -maxdepth 1 -type d -name VibeCAD.app -print | wc -l | tr -d ' ')"
+          if [[ "${app_count}" != "1" || ! -d "${installed_app}" ]]; then
+            echo "The PKG did not install exactly one /Applications/VibeCAD.app." >&2
+            exit 1
+          fi
+          /usr/sbin/pkgutil --pkg-info com.vibecad.desktop
+          env \
+            QT_QPA_PLATFORM=offscreen \
+            VIBECAD_CLEAN_INSTALL_SMOKE_ROOT="${smoke_root}" \
+            VIBECAD_HOME="${smoke_root}/vibecad-home" \
+            VIBECAD_INSTALLED_APP_PATH="${installed_app}" \
+            VIBECAD_RUN_CLEAN_INSTALL_SMOKE=1 \
+            "${installed_app}/Contents/MacOS/FreeCAD" \
+            --hidden \
+            --user-cfg "${smoke_root}/user.cfg" \
+            --system-cfg "${smoke_root}/system.cfg" \
+            "${GITHUB_WORKSPACE}/tools/macos_clean_install_smoke.py"
+          python3 tools/macos_clean_install_smoke.py \
+            --verify-report "${smoke_root}/smoke-report.json" \
+            --expected-root "${smoke_root}" \
+            --expected-application "${installed_app}"
+
+      - name: Remove clean-machine test installation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          installed_app="/Applications/VibeCAD.app"
+          install_marker="${RUNNER_TEMP}/vibecad-clean-install-owned"
+          if [[ "${installed_app}" != "/Applications/VibeCAD.app" ]]; then
+            echo "Refusing to remove an unexpected application path." >&2
+            exit 1
+          fi
+          if [[ -e "${installed_app}" ]]; then
+            if [[ ! -f "${install_marker}" ]]; then
+              echo "Refusing to remove an application that this job did not install." >&2
+              exit 1
+            fi
+            if [[ ! -d "${installed_app}" || -L "${installed_app}" ]]; then
+              echo "Refusing to remove a non-directory or symbolic link." >&2
+              exit 1
+            fi
+            bundle_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${installed_app}/Contents/Info.plist")"
+            if [[ "${bundle_name}" != "VibeCAD" ]]; then
+              echo "Refusing to remove an application that is not VibeCAD." >&2
+              exit 1
+            fi
+            sudo /bin/rm -rf -- "${installed_app}"
+          fi
+          sudo /usr/sbin/pkgutil --forget com.vibecad.desktop || true
+          if [[ -e "${installed_app}" ]]; then
+            echo "VibeCAD test installation cleanup failed." >&2
+            exit 1
+          fi
+
+      - name: Verify production signatures and notarization
+        if: ${{ inputs.sign_release }}
+        shell: bash
+        working-directory: package/rattler-build/osx
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict --verbose=2 VibeCAD.app
+          codesign -dv --verbose=4 VibeCAD.app 2>&1 | grep -F 'Authority=Developer ID Application'
+          spctl --assess --type execute --verbose=4 VibeCAD.app
+          dmg=(VibeCAD-*.dmg)
+          pkg=(VibeCAD-*.pkg)
+          xcrun stapler validate "${dmg[0]}"
+          xcrun stapler validate "${pkg[0]}"
+          pkgutil --check-signature "${pkg[0]}" | grep -F 'Developer ID Installer'
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -226,6 +444,9 @@ jobs:
           path: |
             package/rattler-build/osx/VibeCAD-*.dmg
             package/rattler-build/osx/VibeCAD-*.dmg-SHA256.txt
+            package/rattler-build/osx/VibeCAD-*.pkg
+            package/rattler-build/osx/VibeCAD-*.pkg-SHA256.txt
+            package/rattler-build/osx/VibeCAD-*-release-evidence/**
 
   publish:
     name: Publish macOS Prerelease
@@ -234,6 +455,8 @@ jobs:
       - macos
     if: ${{ inputs.publish_release }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
@@ -256,7 +479,7 @@ jobs:
             sha256sum --check "${checksum}"
           done
 
-          mapfile -t assets < <(find . -maxdepth 1 -type f -print | sort)
+          mapfile -t assets < <(find . -type f -print | sort)
           if [[ "${#assets[@]}" -eq 0 ]]; then
             echo "No macOS release assets were downloaded." >&2
             exit 1
@@ -272,7 +495,7 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --target "${SOURCE_SHA}" \
               --title "VibeCAD macOS ${RELEASE_TAG}" \
-              --notes "Unsigned VibeCAD macOS test builds. This release contains macOS artifacts only." \
+              --notes "VibeCAD macOS artifacts. Production status depends on the signing mode recorded by this workflow run." \
               --prerelease \
               "${assets[@]}"
           fi

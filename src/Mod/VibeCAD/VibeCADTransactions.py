@@ -45,10 +45,10 @@ def run_freecad_transaction(
     handler: ActionHandler,
     verifier: VerificationHandler | None = None,
 ) -> dict[str, Any]:
-    """Run one native FreeCAD undo transaction without rollback or cleanup.
+    """Run one native FreeCAD transaction and publish only a valid result.
 
-    Failure is retained in the document exactly as FreeCAD produced it so the
-    model and user can inspect and repair the real feature history.
+    Failed candidates are described in the returned diagnostics, but the open
+    transaction is aborted so they do not replace the last accepted document.
     """
     try:
         import FreeCAD as App
@@ -99,6 +99,9 @@ def run_freecad_transaction(
     mutation_started = False
     commit_attempted = False
     commit_succeeded = False
+    rollback_attempted = False
+    rollback_succeeded = False
+    rollback_error: str | None = None
     try:
         if doc is not None and hasattr(doc, "openTransaction"):
             doc.openTransaction(name)
@@ -157,20 +160,12 @@ def run_freecad_transaction(
             handler_diagnostics,
             final_diagnostics,
         )
-        if transaction_pending and doc is not None and hasattr(doc, "commitTransaction"):
-            commit_attempted = True
-            try:
-                doc.commitTransaction()
-                commit_succeeded = True
-            except Exception as exc:
-                commit_error = str(exc)
-            transaction_pending = False
         active_doc = App.ActiveDocument or doc
-        after = _document_snapshot(active_doc)
-        document_delta = _document_delta(before, after)
+        candidate_after = _document_snapshot(active_doc)
+        candidate_delta = _document_delta(before, candidate_after)
         diagnostic_scope = _transaction_object_scope(
             active_doc,
-            document_delta,
+            candidate_delta,
             result,
         )
         native_diagnostics = _scope_recompute_diagnostics(
@@ -190,6 +185,38 @@ def run_freecad_transaction(
                 }
             )
             verification["checks"] = checks
+        candidate_ok = (
+            not operation_error
+            and not recompute_error
+            and bool(verification.get("ok", True))
+            and not bool(diagnostic_error)
+        )
+        if transaction_pending and doc is not None:
+            if candidate_ok and hasattr(doc, "commitTransaction"):
+                commit_attempted = True
+                try:
+                    doc.commitTransaction()
+                    commit_succeeded = True
+                except Exception as exc:
+                    commit_error = str(exc)
+                    if hasattr(doc, "abortTransaction"):
+                        rollback_attempted = True
+                        try:
+                            doc.abortTransaction()
+                            rollback_succeeded = True
+                        except Exception as rollback_exc:
+                            rollback_error = str(rollback_exc)
+                transaction_pending = False
+            elif not candidate_ok and hasattr(doc, "abortTransaction"):
+                rollback_attempted = True
+                try:
+                    doc.abortTransaction()
+                    rollback_succeeded = True
+                except Exception as exc:
+                    rollback_error = str(exc)
+                transaction_pending = False
+        after = _document_snapshot(App.ActiveDocument or doc)
+        document_delta = _document_delta(before, after)
         state_change = _state_change(
             document_delta,
             transaction_opened=transaction_opened,
@@ -197,13 +224,7 @@ def run_freecad_transaction(
             commit_attempted=commit_attempted,
             commit_succeeded=commit_succeeded,
         )
-        transaction_ok = (
-            not operation_error
-            and not recompute_error
-            and bool(verification.get("ok", True))
-            and not bool(diagnostic_error)
-            and not commit_error
-        )
+        transaction_ok = candidate_ok and not commit_error
         transaction: dict[str, Any] = {
             "ok": transaction_ok,
             "result": result,
@@ -216,6 +237,10 @@ def run_freecad_transaction(
             "mutation_started": mutation_started,
             "commit_attempted": commit_attempted,
             "commit_succeeded": commit_succeeded,
+            "rollback_attempted": rollback_attempted,
+            "rollback_succeeded": rollback_succeeded,
+            "rollback_error": rollback_error,
+            "candidate_document_delta": candidate_delta,
             "recompute_performed": recompute_performed,
             "recompute_scope": recompute_scope,
             "handler_recomputed": handler_recomputed,
@@ -227,6 +252,9 @@ def run_freecad_transaction(
             elif recompute_error or diagnostic_error:
                 transaction["failure_code"] = "NATIVE_RECOMPUTE_FAILED"
                 transaction["failure_stage"] = "native_recompute"
+            elif rollback_error:
+                transaction["failure_code"] = "TRANSACTION_ROLLBACK_FAILED"
+                transaction["failure_stage"] = "native_call"
             elif commit_error:
                 transaction["failure_code"] = "TRANSACTION_COMMIT_FAILED"
                 transaction["failure_stage"] = "native_call"
@@ -239,6 +267,8 @@ def run_freecad_transaction(
                 transaction["error"] = recompute_error
             elif diagnostic_error:
                 transaction["error"] = diagnostic_error
+            elif rollback_error:
+                transaction["error"] = rollback_error
             elif commit_error:
                 transaction["error"] = commit_error
             elif verification.get("error"):
@@ -251,14 +281,14 @@ def run_freecad_transaction(
                 transaction["recompute_error"] = recompute_error
         return transaction
     except Exception as exc:
-        emergency_commit_error = None
-        if transaction_pending and doc is not None and hasattr(doc, "commitTransaction"):
-            commit_attempted = True
+        emergency_rollback_error = None
+        if transaction_pending and doc is not None and hasattr(doc, "abortTransaction"):
+            rollback_attempted = True
             try:
-                doc.commitTransaction()
-                commit_succeeded = True
-            except Exception as commit_exc:
-                emergency_commit_error = str(commit_exc)
+                doc.abortTransaction()
+                rollback_succeeded = True
+            except Exception as rollback_exc:
+                emergency_rollback_error = str(rollback_exc)
             transaction_pending = False
         document_delta = _document_delta(
             before,
@@ -284,12 +314,14 @@ def run_freecad_transaction(
             "mutation_started": mutation_started,
             "commit_attempted": commit_attempted,
             "commit_succeeded": commit_succeeded,
+            "rollback_attempted": rollback_attempted,
+            "rollback_succeeded": rollback_succeeded,
             "recompute_performed": recompute_performed,
             "recompute_scope": recompute_scope,
             "handler_recomputed": handler_recomputed,
         }
-        if emergency_commit_error:
-            transaction["commit_error"] = emergency_commit_error
+        if emergency_rollback_error:
+            transaction["rollback_error"] = emergency_rollback_error
         return transaction
 
 

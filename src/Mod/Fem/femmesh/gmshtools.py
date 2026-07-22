@@ -278,6 +278,12 @@ class GmshTools(ObjectTools):
         self.program = self.gmsh_bin
         self.arguments = list(command_list)
         self.process.start(self.gmsh_bin, command_list)
+        # The standalone "-" argument tells Gmsh to also read commands from
+        # standard input. QProcess keeps its write channel open by default,
+        # which leaves an asynchronous Gmsh process waiting for more input
+        # after it has processed the model file. No commands are sent through
+        # this channel, so close it at once and give Gmsh an explicit EOF.
+        self.process.closeWriteChannel()
         return self.process
 
     def update_properties(self):

@@ -40,6 +40,13 @@ TOOL_IMPL_DIR = Path(__file__).resolve().parent.parent / "tool_impl"
 # Write-safety tools that legitimately run without a
 # FreeCAD document transaction. Each entry needs a reason.
 TRANSACTION_EXEMPT = {
+    # Changes project JSON; provider-turn acceptance owns its rollback transaction.
+    "core.update_design_brief",
+    # Writes one non-overwriting external artifact; it does not mutate the CAD document.
+    "project.export",
+    "project.export_drawing",
+    # Writes one non-overwriting G-code artifact and restores temporary Job options.
+    "cam.postprocess",
     # Enters native sketch edit mode; changes UI state, not document data.
     "partdesign.edit_sketch",
     # Accepts native sketch edit mode; resetEdit owns the Sketcher transaction commit.
@@ -112,13 +119,17 @@ def core_tools() -> frozenset[str]:
 def engine_tools() -> frozenset[str]:
     import VibeCADSession as session
     import VibeCADVibeScriptDomains as domains
-    from VibeCADModelingSurface import HIDDEN_PROVIDER_INSPECTION_TOOLS
+    from VibeCADModelingSurface import (
+        HIDDEN_PROVIDER_INSPECTION_TOOLS,
+        NATIVE_ANALYSIS_TOOLS,
+    )
 
     return frozenset(
         session.BUILD123D_PROVIDER_TOOLS
         | session.OPENSCAD_PROVIDER_TOOLS
         | session.VIBESCRIPT_PROVIDER_TOOLS
         | set(HIDDEN_PROVIDER_INSPECTION_TOOLS)
+        | set(NATIVE_ANALYSIS_TOOLS)
         | {
             name
             for pack in domains.VIBESCRIPT_WORKBENCH_PACKS.values()
@@ -584,6 +595,8 @@ def test_partdesign_vibescript_surface_is_its_exact_domain_pack() -> None:
         "core.capture_view_screenshot",
         "core.inspect",
         "core.set_view",
+        "core.update_design_brief",
+        "project.export",
         "vibescript.partdesign.create_program",
         "vibescript.partdesign.edit_source",
         "vibescript.partdesign.set_inputs",
@@ -681,6 +694,8 @@ def test_script_engine_surfaces_share_one_provider_inspector() -> None:
         "core.capture_view_screenshot",
         "core.inspect",
         "core.set_view",
+        "core.update_design_brief",
+        "project.export",
         "partdesign.find_subelements",
         "partdesign.measure",
         "build123d.create_model",
@@ -696,6 +711,8 @@ def test_script_engine_surfaces_share_one_provider_inspector() -> None:
         "core.capture_view_screenshot",
         "core.inspect",
         "core.set_view",
+        "core.update_design_brief",
+        "project.export",
         "partdesign.find_subelements",
         "partdesign.measure",
         "openscad.create_model",

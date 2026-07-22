@@ -14,6 +14,8 @@ from enum import Enum
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Any
 from urllib import error, parse, request
 
@@ -167,10 +169,38 @@ def _keyring_module() -> Any | None:
     return keyring
 
 
-def read_keyring_key(provider: str = DEFAULT_PROVIDER) -> str | None:
+def read_keyring_key(
+    provider: str = DEFAULT_PROVIDER,
+    *,
+    runner: Any = subprocess.run,
+    platform_name: str = sys.platform,
+    timeout_seconds: float = 5.0,
+) -> str | None:
     spec = provider_spec(provider)
     if not spec.uses_api_key:
         return None
+    if platform_name == "darwin":
+        try:
+            completed = runner(
+                [
+                    "/usr/bin/security", "find-generic-password",
+                    "-s", KEYRING_SERVICE, "-a", spec.keyring_username, "-w",
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(0.1, min(float(timeout_seconds), 30.0)),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("macOS Keychain lookup timed out.") from exc
+        if completed.returncode == 0:
+            return str(completed.stdout or "").rstrip("\r\n") or None
+        error_text = str(completed.stderr or "").lower()
+        if completed.returncode == 44 or "could not be found" in error_text:
+            return None
+        raise RuntimeError("macOS Keychain lookup failed without returning a credential.")
     keyring = _keyring_module()
     if keyring is None:
         return None

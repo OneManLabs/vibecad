@@ -29,10 +29,24 @@ import pytest
 from VibeCADTools import ToolArgumentValidationError, ToolSpec
 from tool_impl.service import (
     material_list_materials,
+    fem_solve,
     part_find_subelements,
     partdesign_find_subelements,
     partdesign_measure,
 )
+
+
+def test_fem_solver_classifies_native_constraint_without_python_proxy() -> None:
+    native = types.SimpleNamespace(TypeId="Fem::ConstraintFixed", Proxy=None)
+    assert fem_solve._proxy_type(native) == "Fem::ConstraintFixed"
+
+
+def test_fem_solver_prefers_specific_python_proxy_type() -> None:
+    scripted = types.SimpleNamespace(
+        TypeId="Fem::ConstraintPython",
+        Proxy=types.SimpleNamespace(Type="Fem::ConstraintForce"),
+    )
+    assert fem_solve._proxy_type(scripted) == "Fem::ConstraintForce"
 
 
 # ---------------------------------------------------------------------------

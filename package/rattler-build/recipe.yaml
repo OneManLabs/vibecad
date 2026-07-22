@@ -159,10 +159,12 @@ requirements:
     - calculix
     - debugpy
     - defusedxml
+    - cryptography >=45
     - docutils
     - gmsh
     - graphviz
     - ifcopenshell
+    - keyring
     - lark
     - lxml
     - matplotlib-base
@@ -185,6 +187,7 @@ requirements:
     - qt6-main>=6.8,<6.9
     - requests
     - scipy
+    - signxml >=5.1,<6
     - sympy
     - typing_extensions
     - vtk

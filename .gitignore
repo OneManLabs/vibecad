@@ -22,6 +22,7 @@
 *.manifest
 *.o
 *.obj
+!/data/tests/mesh.obj
 *.orig
 *.output
 *.pch

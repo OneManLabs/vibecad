@@ -573,6 +573,24 @@ def test_choose_provider_carries_codex_capability_preferences() -> None:
     assert selected.skills_enabled is True
 
 
+def test_managed_policy_disables_external_codex_skills(monkeypatch) -> None:
+    class _Service:
+        def provider_name(self): return "chatgpt"
+        def auth_state(self): return object()
+        def provider_model(self): return "gpt-test"
+        def provider_reasoning_effort(self): return "high"
+        def provider_base_url(self): return None
+        def web_search_enabled(self): return True
+        def codex_skills_enabled(self): return True
+
+    policy = __import__("VibeCADManagedPolicy").default_policy()
+    policy.update(managed=True, external_plugins_enabled=False)
+    monkeypatch.setattr(session, "load_managed_policy", lambda: policy)
+    selected = session.choose_provider(_Service())
+    assert isinstance(selected, provider.ChatGPTSubscriptionProvider)
+    assert selected.skills_enabled is False
+
+
 @pytest.mark.parametrize(
     ("provider_name", "provider_type"),
     [
