@@ -298,30 +298,167 @@ class VibeCADService:
         self._modeling_engine_cache_value = engine
         return engine
 
-    def route_modeling_strategy(self, request: str) -> dict[str, Any]:
-        """Select and persist the beginner-facing modeling route for one request."""
-        from VibeCADCapabilityRouter import route_capability
+    def _routing_document_structure(self) -> dict[str, Any]:
+        """Return bounded engine and editability evidence for routing."""
+
+        document = self._active_document()
+        if document is None:
+            return {
+                "object_count": 0,
+                "has_geometry": False,
+                "type_ids": [],
+                "detected_engines": [],
+                "established_engine": None,
+                "compatible_capabilities": [],
+            }
+        objects = list(getattr(document, "Objects", []) or [])
+        type_ids: set[str] = set()
+        detected: set[str] = set()
+        has_geometry = False
+        native_structure = False
+        for obj in objects:
+            type_id = str(getattr(obj, "TypeId", "") or "")
+            if type_id:
+                type_ids.add(type_id)
+            shape = getattr(obj, "Shape", None)
+            if shape is not None:
+                try:
+                    if not bool(shape.isNull()):
+                        has_geometry = True
+                except Exception:
+                    pass
+            properties = set(getattr(obj, "PropertiesList", []) or [])
+            if "VibeCADBuild123dSource" in properties:
+                detected.add("build123d")
+                has_geometry = True
+            if "VibeCADOpenSCADSource" in properties:
+                detected.add("openscad")
+                has_geometry = True
+            if str(getattr(obj, "VibeCADScriptedRole", "") or ""):
+                detected.add("vibescript")
+                has_geometry = True
+            if type_id.startswith(("PartDesign::", "Sketcher::")):
+                native_structure = True
+        if has_geometry and native_structure:
+            detected.add("native")
+        current = self.modeling_engine()
+        established: str | None = None
+        if current in detected:
+            established = current
+        elif len(detected) == 1:
+            established = next(iter(detected))
+        elif has_geometry and not detected:
+            established = "native"
+        return {
+            "object_count": len(objects),
+            "has_geometry": has_geometry,
+            "type_ids": sorted(type_ids)[:64],
+            "type_ids_truncated": len(type_ids) > 64,
+            "detected_engines": sorted(detected),
+            "established_engine": established,
+            "compatible_capabilities": [
+                "functional_part", "generic_edit", "part_design", "part_edit"
+            ] if has_geometry and established else [],
+        }
+
+    @staticmethod
+    def _activate_routed_workbench(target_workbench: str) -> None:
+        """Apply the internal workbench target through one narrow GUI adapter."""
+
+        try:
+            import FreeCADGui as Gui
+        except Exception as exc:
+            raise RuntimeError(
+                "The routed CAD workbench cannot be activated without FreeCAD GUI."
+            ) from exc
+        current = Gui.activeWorkbench()
+        if current is not None and str(current.name()) == target_workbench:
+            return
+        Gui.activateWorkbench(target_workbench)
+        active = Gui.activeWorkbench()
+        actual = str(active.name()) if active is not None else ""
+        if actual != target_workbench:
+            raise RuntimeError(
+                f"FreeCAD did not activate the required {target_workbench} workbench."
+            )
+
+    def modeling_strategy_lock(self) -> str | None:
+        return self._project_store.modeling_strategy_lock()
+
+    def set_modeling_strategy_lock(self, engine: str | None) -> dict[str, Any]:
+        """Persist or clear the project-level advanced routing override."""
+
+        persistence = self.document_persistence_state()
+        if not persistence.get("enabled"):
+            raise RuntimeError(
+                str(
+                    persistence.get("message")
+                    or "Save the active document before setting a modeling-strategy lock."
+                )
+            )
+        self._ensure_modeling_engine_change_allowed()
+        result = self._project_store.set_modeling_strategy_lock(engine)
+        return {"ok": True, **result}
+
+    def route_modeling_strategy(
+        self,
+        request: str,
+        *,
+        capability_category: str | None = None,
+        reliability: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Select, apply, and persist one beginner-facing modeling route."""
+
+        from VibeCADCapabilityRouter import (
+            infer_capability_category,
+            make_routing_request,
+            route_capability,
+            target_workbench_for_category,
+        )
 
         document = self._active_document()
         if document is None:
             raise RuntimeError("No active CAD document is available.")
-        has_geometry = False
-        for obj in list(getattr(document, "Objects", []) or []):
-            shape = getattr(obj, "Shape", None)
-            if shape is not None and not bool(getattr(shape, "isNull", lambda: True)()):
-                has_geometry = True
-                break
-            if any(hasattr(obj, name) for name in ("VibeCADSource", "Build123dSource", "OpenSCADSource")):
-                has_geometry = True
-                break
-        workbench = self.active_workbench_name()
-        state = self.modeling_engine_state(workbench)
-        route = route_capability(
-            request, workbench=workbench, current_engine=state["selected"],
-            available_engines=state["available_engines"],
-            has_existing_geometry=has_geometry,
+        source_workbench = self.active_workbench_name()
+        if not source_workbench:
+            raise RuntimeError("No active CAD workbench is available.")
+        selection = self.provider_turn_selection_summary()
+        brief = self.design_brief()
+        manufacturing_process = str(
+            brief.get("manufacturing_process") or ""
+        ).strip()
+        manufacturing_intent = (
+            {"process": manufacturing_process}
+            if manufacturing_process and manufacturing_process.casefold() != "unspecified"
+            else {}
         )
-        if route.engine != state["selected"]:
+        category = str(capability_category or "").strip().lower() or infer_capability_category(
+            request,
+            selection_context=selection,
+            manufacturing_intent=manufacturing_intent,
+        )
+        document_structure = self._routing_document_structure()
+        target_workbench = target_workbench_for_category(
+            category,
+            source_workbench,
+            has_existing_structure=bool(document_structure.get("has_geometry")),
+        )
+        state = self.modeling_engine_state(target_workbench)
+        routing_request = make_routing_request(
+            request,
+            workbench=source_workbench,
+            current_engine=state["selected"],
+            available_engines=state["available_engines"],
+            strategy_lock=self.modeling_strategy_lock(),
+            capability_category=category,
+            selection_context=selection,
+            manufacturing_intent=manufacturing_intent,
+            existing_document_structure=document_structure,
+            reliability=reliability,
+        )
+        route = route_capability(routing_request)
+        self._activate_routed_workbench(route.target_workbench)
+        if route.engine != self.modeling_engine():
             self.set_modeling_engine(route.engine)
         self._last_capability_route = route.summary()
         self._project_store.set_capability_route(self._last_capability_route)
@@ -329,7 +466,16 @@ class VibeCADService:
 
     def last_capability_route(self) -> dict[str, Any] | None:
         route = getattr(self, "_last_capability_route", None)
-        return dict(route) if route else None
+        if route:
+            return dict(route)
+        store = getattr(self, "_project_store", None)
+        if store is None:
+            return None
+        persisted = store.last_capability_route()
+        if persisted:
+            self._last_capability_route = persisted
+            return dict(persisted)
+        return None
 
     def prepare_modeling_engine_read(self) -> dict[str, Any]:
         """Capture the active project key without reading its manifest."""

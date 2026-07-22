@@ -62,6 +62,8 @@ OpenSCAD_rc.py
 tags
 /CMakeUserPresets.json
 Testing
+!docs/testing/
+!docs/testing/**
 compile_commands.json
 *.sublime-project
 *.sublime-workspace

@@ -6,6 +6,7 @@ set(VibeCAD_Scripts
     TestVibeCADProviderBenchmark.py
     TestVibeCADOnboarding.py
     TestVibeCADCandidateReview.py
+    TestVibeCADCapabilityRouter.py
     TestVibeCADTier2Benchmark.py
     TestVibeCADDrawingExport.py
     VibeCADAcceptance.py
@@ -16,6 +17,7 @@ set(VibeCAD_Scripts
     VibeCADDesignBrief.py
     VibeCADExportGuard.py
     VibeCADAuth.py
+    VibeCADBenchmark.py
     VibeCADBuild123d.py
     VibeCADCapabilityRouter.py
     VibeCADCodex.py

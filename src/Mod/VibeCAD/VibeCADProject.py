@@ -814,7 +814,8 @@ class VibeCADProjectStore:
             "document": scope.get("document", {}),
             "documents": manifest.get("documents", {}),
             "modeling_engine": str(manifest.get("modeling_engine") or DEFAULT_MODELING_ENGINE),
-            "last_capability_route": dict(manifest.get("last_capability_route") or {}),
+            "modeling_strategy_lock": self.modeling_strategy_lock(),
+            "last_capability_route": self.last_capability_route(),
         }
 
     def design_document(self) -> dict[str, Any]:
@@ -1091,11 +1092,46 @@ class VibeCADProjectStore:
             "updated_at": saved.get("updated_at"),
         }
 
-    def set_capability_route(self, route: dict[str, Any]) -> dict[str, Any]:
-        if route.get("schema") != "vibecad-capability-route-v1" or not route.get("route_id"):
-            raise RuntimeError("The capability route schema is invalid.")
+    def modeling_strategy_lock(self) -> str | None:
+        raw = self.load_manifest().get("modeling_strategy_lock")
+        if raw is None or not str(raw).strip():
+            return None
+        clean = str(raw).strip().lower()
+        if clean not in MODELING_ENGINES:
+            raise RuntimeError(
+                f"VibeCAD project has an invalid modeling-strategy lock: {clean!r}."
+            )
+        return clean
+
+    def set_modeling_strategy_lock(self, engine: str | None) -> dict[str, Any]:
+        clean = str(engine or "").strip().lower() or None
+        if clean is not None and clean not in MODELING_ENGINES:
+            raise ValueError(
+                f"Modeling-strategy lock must be one of: {sorted(MODELING_ENGINES)}."
+            )
         manifest = self.load_manifest()
-        manifest["last_capability_route"] = dict(route)
+        manifest["modeling_strategy_lock"] = clean
+        saved = self.save_manifest(manifest)
+        return {
+            "engine": clean,
+            "manifest_path": self.project_scope()["manifest_path"],
+            "updated_at": saved.get("updated_at"),
+        }
+
+    def last_capability_route(self) -> dict[str, Any]:
+        raw = dict(self.load_manifest().get("last_capability_route") or {})
+        if not raw:
+            return {}
+        from VibeCADCapabilityRouter import normalize_route_record
+
+        return normalize_route_record(raw)
+
+    def set_capability_route(self, route: dict[str, Any]) -> dict[str, Any]:
+        from VibeCADCapabilityRouter import normalize_route_record
+
+        normalized = normalize_route_record(route)
+        manifest = self.load_manifest()
+        manifest["last_capability_route"] = normalized
         saved = self.save_manifest(manifest)
         return dict(saved["last_capability_route"])
 
@@ -1107,6 +1143,7 @@ class VibeCADProjectStore:
             "title": scope["title"],
             "summary": "",
             "modeling_engine": DEFAULT_MODELING_ENGINE,
+            "modeling_strategy_lock": None,
             "last_capability_route": {},
             "created_at": now_iso(),
             "updated_at": now_iso(),
@@ -1133,6 +1170,11 @@ class VibeCADProjectStore:
         merged["schema"] = PROJECT_SCHEMA
         merged["version"] = 2
         merged["modeling_engine"] = str(migrated_engine or DEFAULT_MODELING_ENGINE).strip().lower()
+        route = dict(merged.get("last_capability_route") or {})
+        if route:
+            from VibeCADCapabilityRouter import normalize_route_record
+
+            merged["last_capability_route"] = normalize_route_record(route)
         merged["project_id"] = scope["project_id"]
         merged["documents"] = dict(merged.get("documents") or {})
         merged["documents"]["active"] = scope.get("document", {})
