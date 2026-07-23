@@ -26,6 +26,7 @@ LIVE_RUNTIME_IDENTITY_VERSION = 3
 LIVE_RUNTIME_FILE_ROLES = (
     "benchmark_evidence_io_helper",
     "benchmark_launcher",
+    "codex_app_server",
     "freecad_app_library",
     "freecad_cmd",
     "freecad_gui",
@@ -35,7 +36,7 @@ LIVE_RUNTIME_FILE_ROLES = (
     "readiness_probe",
     "secure_process_helper",
 )
-LIVE_SUPPORTED_PROVIDERS = ("openai",)
+LIVE_SUPPORTED_PROVIDERS = ("chatgpt", "openai")
 LIVE_SESSION_CALLS = 7
 LIVE_PROVIDER_TURNS_PER_CASE = 12
 LIVE_VISIBLE_RETRY_EVENTS_PER_CASE = 4
@@ -1800,8 +1801,12 @@ def validate_unrated_live_run(
             if legacy
             else runtime["usage_complete"] is True
         )
+        expected_provider_class = {
+            "chatgpt": "ChatGPTSubscriptionProvider",
+            "openai": "OpenAIProvider",
+        }[provider]
         if attempt["passed"] and (
-            runtime["provider_class"] != "OpenAIProvider"
+            runtime["provider_class"] != expected_provider_class
             or runtime["api_request_count"] == 0
             or runtime["api_request_count"] != runtime["provider_turn_count"]
             or runtime["provider_turn_count"] == 0

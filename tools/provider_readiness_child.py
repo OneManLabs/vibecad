@@ -11,6 +11,11 @@ from pathlib import Path
 import sys
 import tempfile
 
+repository_root = Path(__file__).resolve(strict=True).parents[1]
+repository_text = os.fspath(repository_root)
+if repository_text not in sys.path:
+    sys.path.insert(0, repository_text)
+
 from tools.probe_provider_readiness import (
     CREDENTIAL_FINGERPRINT_ALGORITHM,
     canonical_provider_endpoint,
@@ -133,9 +138,10 @@ def main() -> int:
             "model": model,
         })
         if provider == "chatgpt":
-            from VibeCADCodex import CodexAppServerClient
+            from VibeCADCodex import CodexAppServerClient, account_binding_secret
 
             discovered: list[str] = []
+            discovered_default = ""
             with CodexAppServerClient() as client:
                 account_result = client.request(
                     "account/read", {"refreshToken": True}, timeout=timeout
@@ -161,7 +167,10 @@ def main() -> int:
                         else []
                     ):
                         if isinstance(item, dict) and str(item.get("id") or ""):
-                            discovered.append(str(item["id"]))
+                            model_id = str(item["id"])
+                            discovered.append(model_id)
+                            if item.get("isDefault"):
+                                discovered_default = model_id
                     cursor = (
                         str(model_result.get("nextCursor") or "").strip()
                         if isinstance(model_result, dict)
@@ -170,6 +179,8 @@ def main() -> int:
                     if not cursor:
                         model_list_complete = True
                         break
+            if not model:
+                model = discovered_default
             account_verified = bool(
                 isinstance(account, dict) and account.get("type") == "chatgpt"
             )
@@ -223,7 +234,9 @@ def main() -> int:
             )
         validation_performed = True
         model_validation_performed = True
-        model_available = bool(models.get("ok") and model in (models.get("models") or []))
+        model_available = bool(
+            models.get("ok") and model and model in (models.get("models") or [])
+        )
         if auth.status is AuthStatus.VERIFIED and model_available:
             identity["credential_fingerprint"] = credential_fingerprint(
                 provider=provider,
@@ -231,6 +244,9 @@ def main() -> int:
                 binding_nonce=binding_nonce,
                 credential=credential_value,
                 chatgpt_account=validated_account,
+                chatgpt_binding_secret=(
+                    account_binding_secret() if provider == "chatgpt" else None
+                ),
             )
     report = {
         **base, "stage": "complete",

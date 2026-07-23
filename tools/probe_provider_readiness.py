@@ -130,7 +130,11 @@ def endpoint_identity_digest(endpoint_identity: str) -> str:
     return hashlib.sha256(clean.encode("utf-8")).hexdigest()
 
 
-def chatgpt_account_binding_material(account: object) -> str:
+def chatgpt_account_binding_material(
+    account: object,
+    *,
+    binding_secret: str | None = None,
+) -> str:
     """Select a stable account identifier without returning it in evidence."""
 
     if not isinstance(account, dict) or account.get("type") != "chatgpt":
@@ -139,6 +143,25 @@ def chatgpt_account_binding_material(account: object) -> str:
         value = str(account.get(field) or "").strip()
         if value:
             return f"{field}:{value}"
+    email = str(account.get("email") or "").strip().lower()
+    secret = str(binding_secret or "").strip().lower()
+    if email and len(secret) == 64 and all(
+        character in "0123456789abcdef" for character in secret
+    ):
+        account_record = json.dumps(
+            {
+                "email": email,
+                "plan_type": str(account.get("planType") or "").strip(),
+                "type": "chatgpt",
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        private_identity = hmac.new(
+            bytes.fromhex(secret), account_record, hashlib.sha256
+        ).hexdigest()
+        return f"private-account-hmac:{private_identity}"
     raise ValueError(
         "The ChatGPT account has no high-entropy opaque account identifier."
     )
@@ -151,6 +174,7 @@ def credential_fingerprint(
     binding_nonce: str,
     credential: str | None = None,
     chatgpt_account: object = None,
+    chatgpt_binding_secret: str | None = None,
 ) -> str:
     """Create a run-bound digest without returning credential material."""
 
@@ -160,7 +184,10 @@ def credential_fingerprint(
     if not clean_provider or not clean_source or clean_source == "environment":
         raise ValueError("A configured, non-ambient credential source is required.")
     if clean_provider == "chatgpt":
-        secret_material = chatgpt_account_binding_material(chatgpt_account)
+        secret_material = chatgpt_account_binding_material(
+            chatgpt_account,
+            binding_secret=chatgpt_binding_secret,
+        )
     else:
         secret_material = str(credential or "")
         if not secret_material:
@@ -187,6 +214,7 @@ def readiness_execution_identity_matches(
     auth_source: str,
     credential: str | None = None,
     chatgpt_account: object = None,
+    chatgpt_binding_secret: str | None = None,
 ) -> bool:
     """Compare current execution identity with verified readiness evidence."""
 
@@ -198,6 +226,7 @@ def readiness_execution_identity_matches(
             binding_nonce=str(report.get("credential_binding_nonce") or ""),
             credential=credential,
             chatgpt_account=chatgpt_account,
+            chatgpt_binding_secret=chatgpt_binding_secret,
         )
         return bool(
             report.get("provider") == str(provider or "").strip().lower()
@@ -300,7 +329,9 @@ def run_probe(
         )
         process_runner = runner or run_bounded_process
         completed = process_runner(
-            [str(freecad), "-c", expression], env=environment,
+            [str(freecad), "-c", expression],
+            cwd=child.resolve().parents[1],
+            env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, timeout=timeout_seconds, check=False,
         )

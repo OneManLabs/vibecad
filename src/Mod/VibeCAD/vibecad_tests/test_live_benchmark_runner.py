@@ -92,6 +92,10 @@ def _runtime_identity_record(source_commit: str = SOURCE_COMMIT) -> dict:
                         "tools/vibecad_benchmark_evidence_io.py",
                     ),
                     ("benchmark_launcher", "tools/run_live_tier1_benchmark.py"),
+                    (
+                        "codex_app_server",
+                        "build/release/Mod/VibeCAD/codex_runtime/codex-app-server",
+                    ),
                     ("freecad_app_library", "build/release/lib/libFreeCADApp.dylib"),
                     ("freecad_cmd", "FreeCADCmd"),
                     ("freecad_gui", "FreeCAD"),
@@ -521,11 +525,14 @@ def test_runtime_identity_rejects_stale_installed_gui_entry(tmp_path: Path) -> N
     runtime_bin = tmp_path / "build" / "release" / "bin"
     runtime_lib = tmp_path / "build" / "release" / "lib"
     runtime_tools = tmp_path / "tools"
+    codex_runtime = installed / "codex_runtime"
     runtime_bin.mkdir(parents=True)
     runtime_lib.mkdir(parents=True)
     runtime_tools.mkdir(parents=True)
+    codex_runtime.mkdir(parents=True)
     for name in ("FreeCAD", "FreeCADCmd"):
         (runtime_bin / name).write_bytes(f"{name} runtime".encode("utf-8"))
+    (codex_runtime / "codex-app-server").write_bytes(b"codex runtime")
     for name in ("libFreeCADApp.dylib", "libFreeCADGui.dylib"):
         (runtime_lib / name).write_bytes(f"{name} runtime".encode("utf-8"))
     for name in (
@@ -805,6 +812,17 @@ def test_runtime_identity_contract_rejects_source_drift() -> None:
     identity["source_commit"] = "f" * 40
     with pytest.raises(Exception, match="does not match"):
         validate_runtime_identity(identity, source_commit=SOURCE_COMMIT)
+
+
+def test_live_run_accepts_bound_chatgpt_subscription_adapter_evidence() -> None:
+    raw = _raw_run("8" * 64)
+    raw["provider"] = "chatgpt"
+    for attempt in raw["case_attempts"]:
+        attempt["provider"] = "chatgpt"
+    for runtime in raw["case_runtime"]:
+        runtime["provider_class"] = "ChatGPTSubscriptionProvider"
+
+    assert validate_unrated_live_run(raw)["provider"] == "chatgpt"
 
 
 @pytest.mark.parametrize("fault", ("missing", "reordered", "escape", "digest"))

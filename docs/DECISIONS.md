@@ -555,3 +555,15 @@ and after execution. The scorer reopens and hashes every declared component
 before scoring and before report publication. Large identity data travels in a
 protected file, not in one environment variable. A missing, changed, linked,
 aliased, escaped, or unbounded component makes the evidence invalid.
+
+## D-072: ChatGPT benchmark identity uses a private local account HMAC
+
+Date: 2026-07-22. Status: Accepted.
+
+The ChatGPT app-server can return an account with an email but no opaque account
+identifier. VibeCAD must not publish that email or read the OAuth token. It
+creates one random local account-binding key in the private VibeCAD Codex home.
+The readiness process uses that key to HMAC a canonical account record and then
+creates the run-bound credential fingerprint. The GUI rechecks the same account
+with the same private key. The evidence contains neither input. A missing,
+linked, shared, malformed, or changed key fails closed.

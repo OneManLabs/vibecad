@@ -380,6 +380,51 @@ def test_email_only_chatgpt_account_cannot_create_execution_binding() -> None:
         )
 
 
+def test_email_only_chatgpt_account_uses_private_local_binding_key() -> None:
+    account = {
+        "type": "chatgpt",
+        "email": "designer@example.test",
+        "planType": "pro",
+    }
+    secret = "9a" * 32
+    nonce = "78" * 32
+    fingerprint = credential_fingerprint(
+        provider="chatgpt",
+        auth_source="Codex credential store",
+        binding_nonce=nonce,
+        chatgpt_account=account,
+        chatgpt_binding_secret=secret,
+    )
+    report = {
+        **_ready_child_result(nonce),
+        "provider": "chatgpt",
+        "auth_source": "Codex credential store",
+        "endpoint_identity": canonical_provider_endpoint("chatgpt", None),
+        "endpoint_sha256": endpoint_identity_digest(
+            canonical_provider_endpoint("chatgpt", None)
+        ),
+        "credential_fingerprint": fingerprint,
+    }
+
+    assert account["email"] not in json.dumps(report)
+    assert readiness_execution_identity_matches(
+        report,
+        provider="chatgpt",
+        base_url=None,
+        auth_source="Codex credential store",
+        chatgpt_account=account,
+        chatgpt_binding_secret=secret,
+    )
+    assert not readiness_execution_identity_matches(
+        report,
+        provider="chatgpt",
+        base_url=None,
+        auth_source="Codex credential store",
+        chatgpt_account=account,
+        chatgpt_binding_secret="8b" * 32,
+    )
+
+
 def test_readiness_fingerprint_does_not_disclose_credential(tmp_path) -> None:
     output = tmp_path / "result.json"
 

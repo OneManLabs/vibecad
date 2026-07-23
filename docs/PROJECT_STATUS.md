@@ -651,3 +651,61 @@ score the result. Then fix the early macOS menu-registration warnings.
 External blockers: Production Developer ID signing and Apple notarization still
 need the acknowledged Apple credentials. They do not block the developer
 executable or the live benchmark.
+
+## P4-005 ChatGPT live-readiness checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The live contract now supports the normal
+`ChatGPTSubscriptionProvider` as well as the OpenAI API adapter. A blank ChatGPT
+model setting resolves through the bounded no-prompt model list to its exact
+declared default. The current account resolves to `gpt-5.6-sol`. The GUI runner
+then sets that exact model on the adapter and disables skills and web search.
+The pinned Codex app-server executable is now a required content-bound runtime
+component.
+
+Implemented: The readiness child now imports its reviewed source from the exact
+repository root when `FreeCADCmd` omits the current directory from `sys.path`.
+It writes no prompt or CAD data. ChatGPT accounts that expose only an email use
+a private, random, mode-0600 local account-binding key. Evidence contains only a
+run-bound HMAC. It does not contain the email, the local key, or an OAuth token.
+
+Files changed: ChatGPT subscription transport, live benchmark and runtime
+contracts, readiness child and probe, GUI benchmark runner, focused tests, and
+project records.
+
+Tests added: Private account-binding key creation, repeatability, permissions,
+symbolic-link rejection, email redaction, changed-key rejection, ChatGPT adapter
+evidence, and Codex app-server runtime identity.
+
+Tests run: The focused ChatGPT, readiness, benchmark, and score group passed 119
+tests. The complete VibeCAD Python suite passed 1,192 tests with 5 skips in
+25.12 seconds. The first parallel CTest run had one isolated inherited
+FreeCAD abort. Two later parallel runs had unrelated native process crashes.
+Each exact test passed alone and passed 10 consecutive stress runs. A sequential
+run passed 1,682 enabled tests but had one isolated STEP validator result
+failure; that exact VibeCAD test then passed alone. The final complete 1,690-test
+parallel inventory passed all 1,683 enabled tests in 40.79 seconds, with 3
+expected skips and 7 registered disabled tests.
+
+Results: The no-prompt readiness gate passes for the signed-in ChatGPT account,
+the exact `gpt-5.6-sol` model, and the content-bound local runtime. It reports
+`prompt_sent: false` and `document_data_sent: false`. P4-005 remains in progress
+until the seven live cases and independent rating set produce a valid score.
+
+Benchmark impact: The exact-source live run can now use the user's ChatGPT
+subscription without an API key. No live prompt has been sent at this
+checkpoint.
+
+Known issues: Inherited native FreeCAD tests can crash nondeterministically when
+many test processes run together. The failures were not repeatable alone or in
+10-run stress checks. The final full run is clean. The STEP validator had one
+nonrepeatable no-result failure at the end of a 193-second sequential inventory.
+
+Next milestone: Commit this tested subscription path to OneManLabs. Run all
+seven Tier 1 cases from that clean exact source commit. Retain complete failure
+and usage evidence. Create an independent content-bound human rating set and
+score the run.
+
+External blockers: Production signing and notarization still need Apple
+credentials. They do not block the developer executable or live benchmark.

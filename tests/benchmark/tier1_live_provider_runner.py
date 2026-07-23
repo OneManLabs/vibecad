@@ -72,7 +72,12 @@ from VibeCADLiveBenchmark import (
     validate_unrated_live_run,
     visible_solid_target_evidence,
 )
-from VibeCADProvider import OPENAI_SDK_MAX_RETRIES, OfflineProvider, OpenAIProvider
+from VibeCADProvider import (
+    OPENAI_SDK_MAX_RETRIES,
+    ChatGPTSubscriptionProvider,
+    OfflineProvider,
+    OpenAIProvider,
+)
 from VibeCADSession import choose_provider, run_prompt
 from VibeCADDocumentValidator import validate_saved_document
 from tools.probe_provider_readiness import readiness_execution_identity_matches
@@ -87,7 +92,10 @@ CASE_TOTAL_TIMEOUT_SECONDS = LIVE_CASE_TOTAL_TIMEOUT_SECONDS
 MAX_TOTAL_TOKENS_PER_CASE = LIVE_TOTAL_TOKENS_PER_CASE
 WORST_CASE_API_ATTEMPTS = LIVE_WORST_CASE_API_ATTEMPTS
 LIMITS = dict(LIVE_LIMITS)
-PROVIDER_CLASSES = {"openai": OpenAIProvider}
+PROVIDER_CLASSES = {
+    "chatgpt": ChatGPTSubscriptionProvider,
+    "openai": OpenAIProvider,
+}
 FOLLOW_UP_CASES = {
     "t1_change_dimension",
     "t1_mirror_feature",
@@ -547,17 +555,35 @@ def _selected_provider(
 ) -> Any:
     if service.provider_name() != readiness["provider"]:
         raise RuntimeError("The selected provider changed after readiness validation.")
-    if service.provider_model() != readiness["model"]:
+    configured_model = service.provider_model()
+    if (
+        configured_model != readiness["model"]
+        and not (
+            readiness["provider"] == "chatgpt"
+            and not configured_model
+        )
+    ):
         raise RuntimeError("The selected model changed after readiness validation.")
     auth = service.auth_state()
     if auth.source != readiness["auth_source"] or auth.source == "environment":
         raise RuntimeError("The configured credential source changed after readiness validation.")
+    chatgpt_account = None
+    if readiness["provider"] == "chatgpt":
+        from VibeCADCodex import account_binding_secret, read_account
+
+        account_result = read_account(refresh_token=False)
+        chatgpt_account = account_result.get("account")
+        chatgpt_binding_key = account_binding_secret()
+    else:
+        chatgpt_binding_key = None
     if not readiness_execution_identity_matches(
         readiness,
         provider=service.provider_name(),
         base_url=service.provider_base_url(),
         auth_source=auth.source,
         credential=service.provider_api_key(),
+        chatgpt_account=chatgpt_account,
+        chatgpt_binding_secret=chatgpt_binding_key,
     ):
         raise RuntimeError(
             "The provider endpoint or credential changed after readiness validation."
@@ -568,29 +594,48 @@ def _selected_provider(
         raise RuntimeError("The normal provider selector returned the wrong adapter.")
     if isinstance(selected, OfflineProvider):
         raise RuntimeError("The normal provider selector returned offline mode.")
+    if (
+        isinstance(selected, ChatGPTSubscriptionProvider)
+        and not str(getattr(selected, "model", "") or "").strip()
+    ):
+        selected.model = str(readiness["model"])
     if str(getattr(selected, "model", "")) != readiness["model"]:
         raise RuntimeError("The selected provider adapter has the wrong model.")
     if hasattr(selected, "max_turns"):
         selected.max_turns = MAX_PROVIDER_TURNS
     if hasattr(selected, "timeout_seconds"):
         selected.timeout_seconds = PROVIDER_TIMEOUT_SECONDS
-    if type(selected) is not OpenAIProvider:
-        raise RuntimeError("The live benchmark permits only the OpenAI API adapter.")
-    if not readiness_execution_identity_matches(
-        readiness,
-        provider="openai",
-        base_url=selected.base_url,
-        auth_source=auth.source,
-        credential=selected.api_key,
-    ):
-        raise RuntimeError(
-            "The selected adapter endpoint or credential does not match readiness."
-        )
-    if OPENAI_SDK_MAX_RETRIES != LIVE_SDK_RETRIES_PER_REQUEST:
-        raise RuntimeError("The OpenAI SDK retry contract changed.")
-    selected.max_request_bytes = LIVE_MAX_REQUEST_BYTES
-    selected.max_output_tokens_per_request = LIVE_MAX_OUTPUT_TOKENS_PER_REQUEST
-    selected.max_total_tokens = LIVE_TOTAL_TOKENS_PER_CASE
+    if type(selected) is OpenAIProvider:
+        if not readiness_execution_identity_matches(
+            readiness,
+            provider="openai",
+            base_url=selected.base_url,
+            auth_source=auth.source,
+            credential=selected.api_key,
+        ):
+            raise RuntimeError(
+                "The selected adapter endpoint or credential does not match readiness."
+            )
+        if OPENAI_SDK_MAX_RETRIES != LIVE_SDK_RETRIES_PER_REQUEST:
+            raise RuntimeError("The OpenAI SDK retry contract changed.")
+        selected.max_request_bytes = LIVE_MAX_REQUEST_BYTES
+        selected.max_output_tokens_per_request = LIVE_MAX_OUTPUT_TOKENS_PER_REQUEST
+        selected.max_total_tokens = LIVE_TOTAL_TOKENS_PER_CASE
+    elif type(selected) is ChatGPTSubscriptionProvider:
+        if not readiness_execution_identity_matches(
+            readiness,
+            provider="chatgpt",
+            base_url=None,
+            auth_source=auth.source,
+            chatgpt_account=chatgpt_account,
+            chatgpt_binding_secret=chatgpt_binding_key,
+        ):
+            raise RuntimeError(
+                "The selected ChatGPT account does not match readiness."
+            )
+        selected.skills_enabled = False
+    else:
+        raise RuntimeError("The live benchmark selected an unsupported adapter.")
     selected.web_search_enabled = False
     return selected
 

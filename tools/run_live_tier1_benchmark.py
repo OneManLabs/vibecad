@@ -136,6 +136,15 @@ def _native_runtime_library(root: Path, stem: str) -> Path:
     raise RuntimeError(f"The live benchmark {stem} native library is not installed.")
 
 
+def _codex_runtime_executable(root: Path) -> Path:
+    runtime = root / "build" / "release" / "Mod" / "VibeCAD" / "codex_runtime"
+    for name in ("codex-app-server", "codex-app-server.exe"):
+        candidate = runtime / name
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+    raise RuntimeError("The pinned Codex app-server runtime is not installed.")
+
+
 def _runtime_identity(
     root: Path,
     source_commit: str,
@@ -203,6 +212,11 @@ def _runtime_identity(
             root,
             role="benchmark_launcher",
             path=root / "tools" / "run_live_tier1_benchmark.py",
+        ),
+        _runtime_component(
+            root,
+            role="codex_app_server",
+            path=_codex_runtime_executable(root),
         ),
         _runtime_component(
             root,

@@ -58,6 +58,36 @@ def _part_vibescript_context() -> dict:
     )
 
 
+def test_account_binding_secret_is_private_and_stable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "private-codex"
+    monkeypatch.setenv(codex.CODEX_HOME_ENV, str(home))
+
+    first = codex.account_binding_secret()
+    second = codex.account_binding_secret()
+
+    target = home / "account-binding.key"
+    assert first == second
+    assert len(first) == 64
+    assert target.read_text(encoding="ascii") == first
+    assert target.stat().st_mode & 0o077 == 0
+
+
+def test_account_binding_secret_rejects_symbolic_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "private-codex"
+    home.mkdir()
+    target = tmp_path / "outside-key"
+    target.write_text("a" * 64, encoding="ascii")
+    (home / "account-binding.key").symlink_to(target)
+    monkeypatch.setenv(codex.CODEX_HOME_ENV, str(home))
+
+    with pytest.raises(OSError):
+        codex.account_binding_secret()
+
+
 def test_codex_dynamic_tools_require_a_frozen_turn_start_surface() -> None:
     context = _part_vibescript_context()
     context.pop("provider_tool_surface")

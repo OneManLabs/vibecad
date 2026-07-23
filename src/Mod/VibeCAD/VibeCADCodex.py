@@ -15,6 +15,8 @@ import json
 import os
 from pathlib import Path
 import platform
+import secrets
+import stat
 import subprocess
 import sys
 import threading
@@ -98,6 +100,70 @@ def codex_workspace() -> Path:
     path = codex_home() / "workspace"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def account_binding_secret() -> str:
+    """Return a private local key for redacted account-identity evidence."""
+
+    home = codex_home()
+    home.mkdir(parents=True, exist_ok=True)
+    home.chmod(0o700)
+    target = home / "account-binding.key"
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+
+    def read_existing() -> str:
+        descriptor = os.open(target, flags)
+        try:
+            details = os.fstat(descriptor)
+            owner_mismatch = bool(
+                hasattr(os, "getuid") and details.st_uid != os.getuid()
+            )
+            permissions_unsafe = bool(
+                os.name == "posix" and details.st_mode & 0o077
+            )
+            if (
+                not stat.S_ISREG(details.st_mode)
+                or owner_mismatch
+                or details.st_nlink != 1
+                or permissions_unsafe
+                or details.st_size != 64
+            ):
+                raise CodexAppServerError(
+                    "The local ChatGPT account-binding key is unsafe."
+                )
+            value = os.read(descriptor, 65).decode("ascii")
+        finally:
+            os.close(descriptor)
+        if len(value) != 64 or any(
+            character not in "0123456789abcdef" for character in value
+        ):
+            raise CodexAppServerError(
+                "The local ChatGPT account-binding key is invalid."
+            )
+        return value
+
+    try:
+        return read_existing()
+    except FileNotFoundError:
+        value = secrets.token_hex(32)
+        create_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        create_flags |= getattr(os, "O_CLOEXEC", 0)
+        create_flags |= getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(target, create_flags, 0o600)
+        except FileExistsError:
+            return read_existing()
+        try:
+            payload = value.encode("ascii")
+            if os.write(descriptor, payload) != len(payload):
+                raise CodexAppServerError(
+                    "The local ChatGPT account-binding key write was incomplete."
+                )
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        return value
 
 
 def vibecad_thread_config(
