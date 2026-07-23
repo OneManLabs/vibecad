@@ -255,7 +255,7 @@ class Measurements:
             isinstance(turn, bool)
             or not isinstance(turn, int)
             or turn not in self._request_turns
-            or turn in self._usage_turns
+            or (turn in self._usage_turns and mode != "cumulative")
         ):
             self._fail(
                 "Provider usage is not bound to one unique request turn.",

@@ -85,6 +85,18 @@ def test_request_monitor_accepts_a_lower_consistent_retry_ceiling() -> None:
     assert measured.snapshot()["api_request_count"] == 1
 
 
+def test_request_monitor_accepts_nondecreasing_cumulative_turn_updates() -> None:
+    measured = live_runner.Measurements()
+    measured.progress(_request(1, retries=0))
+    measured.progress(_usage(1, mode="cumulative", total=15))
+    measured.progress(_usage(1, mode="cumulative", total=30))
+
+    snapshot = measured.snapshot()
+    assert measured.limit_error is None
+    assert snapshot["usage_event_count"] == 1
+    assert snapshot["usage"]["total_tokens"] == 30
+
+
 def _partial(
     case_id: str = TIER1_CASE_IDS[0],
     *,

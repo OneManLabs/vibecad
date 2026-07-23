@@ -813,3 +813,38 @@ Next milestone: Commit and push this tested provider-specific retry contract to
 OneManLabs, then run a new exact-source attempt.
 
 External blockers: None for the next attempt.
+
+## P4-005 cumulative-usage checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The third retained attempt reached real model reasoning and CAD
+tool selection. Codex emitted several complete, nondecreasing cumulative usage
+updates for the same request turn. The monitor treated the second update as a
+duplicate and stopped the turn. It now permits repeated cumulative updates for
+the same bound turn. It still rejects repeated incremental usage, unbound
+turns, mode changes, incomplete fields, decreases, and token-limit breaches.
+
+Files changed: Live GUI benchmark usage monitor, focused tests, and project
+records.
+
+Tests added: Two nondecreasing cumulative updates for one zero-retry request
+produce one complete turn measurement and the latest total.
+
+Tests run: The ChatGPT, live-usage, and live-launch group passed 91 tests. The
+installed VibeCAD scripts target rebuilt successfully.
+
+Results: Four live requests produced real usage. The model selected design-brief
+and native CAD tools, but the monitor stopped before it accepted any geometry.
+All canonical CAD hashes and revision counts stayed unchanged. The run is
+retained and not scored.
+
+Benchmark impact: No live-model pass rate is claimed.
+
+Known issues: The offscreen GUI process exited with signal 11 after it retained
+the seven records.
+
+Next milestone: Commit and push the cumulative-usage fix to OneManLabs, then run
+a new exact-source attempt.
+
+External blockers: None for the next attempt.
