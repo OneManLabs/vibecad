@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import secrets
 import sys
+import threading
 import time
 from typing import Any
 
@@ -114,6 +115,39 @@ FOLLOW_UP_CASES = {
     "t1_mirror_feature",
     "t1_export_stl",
 }
+
+
+def _run_on_gui_worker(operation: Any, event_pump: Any) -> Any:
+    """Run provider work off the document thread while Qt processes CAD calls."""
+
+    completed = threading.Event()
+    outcome: dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            outcome["result"] = operation()
+        except BaseException as exc:
+            outcome["error"] = exc
+        finally:
+            completed.set()
+
+    thread = threading.Thread(
+        target=worker,
+        name="VibeCAD-live-benchmark-provider",
+        daemon=True,
+    )
+    thread.start()
+    while not completed.is_set():
+        event_pump()
+        completed.wait(0.01)
+    event_pump()
+    thread.join(timeout=1.0)
+    if thread.is_alive():
+        raise RuntimeError("The live benchmark provider worker did not stop.")
+    error = outcome.get("error")
+    if isinstance(error, BaseException):
+        raise error
+    return outcome.get("result")
 
 
 class Measurements:
@@ -1248,14 +1282,21 @@ def _run_case(
         selected = _selected_provider(service, readiness)
         provider_class = selected.__class__.__name__
         checkpoint(force=True)
-        response = run_prompt(
-            str(case["prompt"]),
-            service=service,
-            prefer_online=True,
-            provider=selected,
-            progress_callback=progress,
-            cancellation_check=measurements.cancelled,
-            question_callback=questions,
+        import VibeCADGui
+
+        VibeCADGui._ensure_document_thread_invoker()
+        response = _run_on_gui_worker(
+            lambda: run_prompt(
+                str(case["prompt"]),
+                service=service,
+                prefer_online=True,
+                provider=selected,
+                progress_callback=progress,
+                cancellation_check=measurements.cancelled,
+                question_callback=questions,
+                document_thread_dispatch=VibeCADGui._dispatch_to_document_thread,
+            ),
+            Gui.updateGui,
         )
         execution_error = response.error or measurements.limit_error
         if execution_error is None:

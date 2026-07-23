@@ -814,6 +814,44 @@ OneManLabs, then run a new exact-source attempt.
 
 External blockers: None for the next attempt.
 
+## P4-005 GUI document-thread checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The fourth retained attempt passed request and usage accounting.
+The model completed design-brief tools and requested native CAD tools. The
+benchmark had called `run_prompt` on the GUI document thread. A dynamic CAD tool
+could not dispatch to that blocked thread, so the four creation cases reached
+their 120-second provider timeout. The benchmark now uses the production
+pattern: provider work runs on one daemon worker while the GUI thread processes
+queued document operations. `run_prompt` receives the same synchronous document
+dispatcher that the assistant GUI uses.
+
+Files changed: Live GUI benchmark runner, focused worker-thread test, and project
+records.
+
+Tests added: The provider operation runs off the caller thread while the caller
+continues to pump events and receives the result.
+
+Tests run: The ChatGPT, live-usage, and live-launch group passed 92 tests. The
+installed VibeCAD scripts target rebuilt successfully.
+
+Results: Four live creation requests timed out after valid reasoning, usage, and
+tool-selection evidence. No geometry was accepted. All canonical CAD files and
+revision heads stayed unchanged. Dependent cases failed closed. The full
+attempt is retained and not scored.
+
+Benchmark impact: No live-model pass rate is claimed.
+
+Known issues: One creation case crossed the 200,000-token case limit while its
+CAD tool was blocked. The GUI process exited with signal 10 after it retained
+all records.
+
+Next milestone: Commit and push the production-equivalent GUI threading fix to
+OneManLabs. Run a new exact-source seven-case attempt.
+
+External blockers: None for the next attempt.
+
 ## P4-005 cumulative-usage checkpoint: 2026-07-22
 
 Milestone: P4-005 live Tier 1 benchmark execution.

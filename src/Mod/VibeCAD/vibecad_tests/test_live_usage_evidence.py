@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -95,6 +96,25 @@ def test_request_monitor_accepts_nondecreasing_cumulative_turn_updates() -> None
     assert measured.limit_error is None
     assert snapshot["usage_event_count"] == 1
     assert snapshot["usage"]["total_tokens"] == 30
+
+
+def test_live_provider_operation_runs_off_gui_thread_while_events_pump() -> None:
+    main_thread = threading.current_thread()
+    observed: dict[str, object] = {}
+
+    def operation() -> str:
+        observed["worker"] = threading.current_thread()
+        time.sleep(0.02)
+        return "complete"
+
+    def event_pump() -> None:
+        observed["pump"] = threading.current_thread()
+
+    result = live_runner._run_on_gui_worker(operation, event_pump)
+
+    assert result == "complete"
+    assert observed["worker"] is not main_thread
+    assert observed["pump"] is main_thread
 
 
 def _partial(
