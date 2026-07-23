@@ -1,6 +1,6 @@
 {
   "schema": "vibecad-implementation-backlog-v1",
-  "updated_at": "2026-07-23T00:18:43Z",
+  "updated_at": "2026-07-23T03:30:00Z",
   "items": [
     {
       "id": "P0-001",
@@ -125,7 +125,7 @@
       "work_item": "Run and score a fail-closed Tier 1 live-model benchmark",
       "dependencies": ["P4-001", "P4-002"],
       "status": "in_progress",
-      "test_requirements": ["exact source and runtime identity", "fresh provider readiness", "no prompt before readiness", "complete seven-case attempt evidence", "adversarial result validation", "separate content-bound human ratings"],
+      "test_requirements": ["exact source and runtime identity", "exact selected provider Python and loaded dependency attestation", "fresh provider readiness", "no prompt before readiness", "complete seven-case attempt evidence without invented usage", "bounded redacted progress evidence", "adversarial result validation", "retained readiness and runtime file verification during scoring", "separate content-bound human ratings", "complete Python and CTest regressions"],
       "acceptance_criteria": ["A live prompt starts only after exact source, runtime, provider, model, and readiness checks pass", "Every case keeps complete failure or success evidence", "A score requires a complete bound human rating set", "The Tier 1 live-model rate is at least 95 percent before the product target can pass"]
     },
     {

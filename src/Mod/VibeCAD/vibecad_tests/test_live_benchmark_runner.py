@@ -4,12 +4,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from tools.run_live_tier1_benchmark import _runtime_identity, execute_live_benchmark
+from tools.vibecad_secure_process import run_bounded_process
 from VibeCADBenchmark import (
     BenchmarkEvidenceError,
     VALIDATION_STAGES,
@@ -41,16 +48,65 @@ from VibeCADLiveBenchmark import (
 SOURCE_COMMIT = "a" * 40
 
 
+def _provider_runtime_record() -> dict:
+    return {
+        "schema": "vibecad-provider-runtime-attestation-v1",
+        "version": 1,
+        "platform": "darwin",
+        "python": {},
+        "provider_modules": [],
+        "loaded_python_files": [],
+        "distributions": [],
+        "native_libraries": [],
+        "components": [
+            {
+                "path": ".pixi/envs/default/bin/python3.11",
+                "size": 1,
+                "sha256": "f" * 64,
+            }
+        ],
+    }
+
+
 def _runtime_identity_record(source_commit: str = SOURCE_COMMIT) -> dict:
     return {
-        "schema": "vibecad-live-runtime-identity-v1",
-        "version": 1,
+        "schema": "vibecad-live-runtime-identity-v3",
+        "version": 3,
         "source_commit": source_commit,
         "module_file_count": 1,
         "module_manifest_sha256": "1" * 64,
         "gui_entry_sha256": "2" * 64,
         "gui_runner_sha256": "3" * 64,
         "case_catalog_sha256": "4" * 64,
+        "runtime_files": [
+            {
+                "role": role,
+                "path": path,
+                "size": index + 1,
+                "sha256": f"{index + 5:x}" * 64,
+            }
+            for index, (role, path) in enumerate(
+                (
+                    (
+                        "benchmark_evidence_io_helper",
+                        "tools/vibecad_benchmark_evidence_io.py",
+                    ),
+                    ("benchmark_launcher", "tools/run_live_tier1_benchmark.py"),
+                    ("freecad_app_library", "build/release/lib/libFreeCADApp.dylib"),
+                    ("freecad_cmd", "FreeCADCmd"),
+                    ("freecad_gui", "FreeCAD"),
+                    ("freecad_gui_library", "build/release/lib/libFreeCADGui.dylib"),
+                    (
+                        "provider_runtime_attestation",
+                        "tools/provider_runtime_attestation.py",
+                    ),
+                    ("readiness_child", "tools/provider_readiness_child.py"),
+                    ("readiness_probe", "tools/probe_provider_readiness.py"),
+                    ("secure_process_helper", "tools/vibecad_secure_process.py"),
+                )
+            )
+        ],
+        "provider_runtime": _provider_runtime_record(),
     }
 
 
@@ -189,11 +245,223 @@ def test_unverified_readiness_stops_before_gui_or_prompt(tmp_path: Path) -> None
         credential_validation_timeout=5,
         probe=lambda *args, **kwargs: _readiness(verified=False),
         process_runner=process_runner,
-        runtime_preparer=lambda root, commit: _runtime_identity_record(commit),
+        runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
     )
 
     assert result == 2
     assert process_called is False
+
+
+def test_live_child_receives_only_allowlisted_ambient_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hostile_values = {
+        "OPENAI_API_KEY": "ambient-openai-secret",
+        "ANTHROPIC_API_KEY": "ambient-anthropic-secret",
+        "AWS_SECRET_ACCESS_KEY": "ambient-cloud-secret",
+        "PYTHONPATH": "/tmp/hostile-python",
+        "PYTHONHOME": "/tmp/hostile-home",
+        "DYLD_INSERT_LIBRARIES": "/tmp/hostile.dylib",
+        "DYLD_LIBRARY_PATH": "/tmp/hostile-loader",
+        "LD_PRELOAD": "/tmp/hostile.so",
+        "LD_LIBRARY_PATH": "/tmp/hostile-loader",
+        "BASH_ENV": "/tmp/hostile-bash",
+        "ENV": "/tmp/hostile-shell",
+        "ZDOTDIR": "/tmp/hostile-zsh",
+        "QT_PLUGIN_PATH": "/tmp/hostile-qt",
+        "XDG_CONFIG_HOME": "/tmp/hostile-config",
+        "XDG_DATA_HOME": "/tmp/hostile-data",
+        "VIBECAD_HOSTILE_AMBIENT": "must-not-pass",
+    }
+    for name, value in hostile_values.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("HOME", str(tmp_path / "safe-home"))
+    monkeypatch.setenv("PATH", "/tmp/hostile-path")
+
+    def process_runner(command, **kwargs):
+        environment = kwargs["env"]
+        assert all(name not in environment for name in hostile_values)
+        assert environment["HOME"] == str(tmp_path / "safe-home")
+        assert environment["PATH"] == os.defpath
+        assert environment["QT_QPA_PLATFORM"] == "offscreen"
+        assert environment["VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT"] == SOURCE_COMMIT
+        return _completed_process_result(command, **kwargs)
+
+    result = execute_live_benchmark(
+        freecad=Path("FreeCAD"),
+        freecad_cmd=Path("FreeCADCmd"),
+        run_directory=tmp_path / "run",
+        source_commit=SOURCE_COMMIT,
+        timeout_seconds=1800,
+        readiness_timeout_seconds=30,
+        credential_validation_timeout=5,
+        probe=lambda *args, **kwargs: _readiness(verified=True),
+        process_runner=process_runner,
+        runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
+        source_verifier=lambda root: SOURCE_COMMIT,
+        runtime_rechecker=lambda root, commit, *_paths: _runtime_identity_record(commit),
+    )
+
+    assert result == 0
+
+
+def test_live_run_directory_is_private(tmp_path: Path) -> None:
+    run_directory = tmp_path / "private" / "run"
+    result = execute_live_benchmark(
+        freecad=Path("FreeCAD"),
+        freecad_cmd=Path("FreeCADCmd"),
+        run_directory=run_directory,
+        source_commit=SOURCE_COMMIT,
+        timeout_seconds=1800,
+        readiness_timeout_seconds=30,
+        credential_validation_timeout=5,
+        probe=lambda *args, **kwargs: _readiness(verified=False),
+        runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
+    )
+
+    assert result == 2
+    assert stat.S_IMODE(run_directory.stat().st_mode) == 0o700
+
+
+def test_live_run_directory_rejects_a_symlink_parent(tmp_path: Path) -> None:
+    actual = tmp_path / "actual"
+    actual.mkdir()
+    linked = tmp_path / "linked"
+    linked.symlink_to(actual, target_is_directory=True)
+    prepared = False
+
+    def prepare(root, commit, *_paths):
+        nonlocal prepared
+        prepared = True
+        return _runtime_identity_record(commit)
+
+    with pytest.raises(ValueError, match="symlink|unsafe"):
+        execute_live_benchmark(
+            freecad=Path("FreeCAD"),
+            freecad_cmd=Path("FreeCADCmd"),
+            run_directory=linked / "run",
+            source_commit=SOURCE_COMMIT,
+            timeout_seconds=1800,
+            readiness_timeout_seconds=30,
+            credential_validation_timeout=5,
+            probe=lambda *args, **kwargs: _readiness(verified=False),
+            runtime_preparer=prepare,
+        )
+
+    assert prepared is False
+    assert not (actual / "run").exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("timeout_seconds", float("nan")),
+        ("timeout_seconds", float("inf")),
+        ("readiness_timeout_seconds", float("nan")),
+        ("readiness_timeout_seconds", float("-inf")),
+        ("credential_validation_timeout", float("nan")),
+        ("credential_validation_timeout", float("inf")),
+    ),
+)
+def test_live_runner_rejects_non_finite_timeouts_before_side_effects(
+    tmp_path: Path, field: str, value: float
+) -> None:
+    values = {
+        "timeout_seconds": 1800.0,
+        "readiness_timeout_seconds": 30.0,
+        "credential_validation_timeout": 5.0,
+    }
+    values[field] = value
+    run_directory = tmp_path / field
+
+    with pytest.raises(ValueError, match="finite"):
+        execute_live_benchmark(
+            freecad=Path("FreeCAD"),
+            freecad_cmd=Path("FreeCADCmd"),
+            run_directory=run_directory,
+            source_commit=SOURCE_COMMIT,
+            probe=lambda *args, **kwargs: _readiness(verified=False),
+            runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
+            **values,
+        )
+
+    assert not run_directory.exists()
+
+
+def test_bounded_process_retains_only_the_output_tail() -> None:
+    payload_size = 1024 * 1024
+    result = run_bounded_process(
+        [
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.write('x' * {payload_size} + 'END'); sys.stdout.flush()",
+        ],
+        timeout=10,
+        output_limit_bytes=4096,
+    )
+
+    assert result.returncode == 0
+    assert result.output_truncated is True
+    assert result.output_bytes_seen == payload_size + 3
+    assert len(result.stdout.encode("utf-8")) <= 4096
+    assert result.stdout.endswith("END")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups are required.")
+def test_bounded_process_timeout_kills_its_descendant_group(tmp_path: Path) -> None:
+    child_pid_path = tmp_path / "child.pid"
+    child_code = (
+        "import signal,time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(30)"
+    )
+    parent_code = (
+        "import os,pathlib,signal,subprocess,sys,time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"child=subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"pathlib.Path({str(child_pid_path)!r}).write_text(f'{{os.getpid()}}:{{child.pid}}'); "
+        "time.sleep(30)"
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_bounded_process(
+            [sys.executable, "-c", parent_code],
+            timeout=0.4,
+            termination_grace_seconds=0.1,
+            output_limit_bytes=4096,
+        )
+
+    assert child_pid_path.is_file()
+    parent_pid, child_pid = (
+        int(value)
+        for value in child_pid_path.read_text(encoding="utf-8").split(":")
+    )
+
+    def child_is_active() -> bool:
+        try:
+            os.kill(child_pid, 0)
+        except ProcessLookupError:
+            return False
+        status = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(child_pid)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        return bool(status) and not status.startswith("Z")
+
+    deadline = time.monotonic() + 3
+    while child_is_active() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    try:
+        assert child_is_active() is False
+    finally:
+        try:
+            if os.getpgid(child_pid) == parent_pid:
+                os.killpg(parent_pid, signal.SIGKILL)
+        except (PermissionError, ProcessLookupError):
+            pass
 
 
 def test_stale_runtime_stops_before_provider_readiness(tmp_path: Path) -> None:
@@ -214,7 +482,7 @@ def test_stale_runtime_stops_before_provider_readiness(tmp_path: Path) -> None:
             readiness_timeout_seconds=30,
             credential_validation_timeout=5,
             probe=probe,
-            runtime_preparer=lambda root, commit: (_ for _ in ()).throw(
+            runtime_preparer=lambda root, commit, *_paths: (_ for _ in ()).throw(
                 RuntimeError("The copied runtime is stale.")
             ),
         )
@@ -250,8 +518,64 @@ def test_runtime_identity_rejects_stale_installed_gui_entry(tmp_path: Path) -> N
     for name in ("tier1_live_provider_runner.py", "tier1_cases.json"):
         (source_assets / name).write_text(f"# {name}\n", encoding="utf-8")
         (installed_assets / name).write_text(f"# {name}\n", encoding="utf-8")
+    runtime_bin = tmp_path / "build" / "release" / "bin"
+    runtime_lib = tmp_path / "build" / "release" / "lib"
+    runtime_tools = tmp_path / "tools"
+    runtime_bin.mkdir(parents=True)
+    runtime_lib.mkdir(parents=True)
+    runtime_tools.mkdir(parents=True)
+    for name in ("FreeCAD", "FreeCADCmd"):
+        (runtime_bin / name).write_bytes(f"{name} runtime".encode("utf-8"))
+    for name in ("libFreeCADApp.dylib", "libFreeCADGui.dylib"):
+        (runtime_lib / name).write_bytes(f"{name} runtime".encode("utf-8"))
+    for name in (
+        "run_live_tier1_benchmark.py",
+        "probe_provider_readiness.py",
+        "provider_readiness_child.py",
+        "vibecad_secure_process.py",
+        "vibecad_benchmark_evidence_io.py",
+        "provider_runtime_attestation.py",
+    ):
+        (runtime_tools / name).write_text(f"# {name}\n", encoding="utf-8")
 
-    assert _runtime_identity(tmp_path, SOURCE_COMMIT)["module_file_count"] == 8
+    exact_identity = _runtime_identity(
+        tmp_path,
+        SOURCE_COMMIT,
+        provider_attester=lambda *_args, **_kwargs: _provider_runtime_record(),
+    )
+    assert exact_identity["module_file_count"] == 8
+    runtime_by_role = {
+        item["role"]: item for item in exact_identity["runtime_files"]
+    }
+    freecad_path = runtime_bin / "FreeCAD"
+    original_freecad = freecad_path.read_bytes()
+    freecad_path.write_bytes(b"substituted FreeCAD runtime")
+    substituted_identity = _runtime_identity(
+        tmp_path,
+        SOURCE_COMMIT,
+        provider_attester=lambda *_args, **_kwargs: _provider_runtime_record(),
+    )
+    substituted_by_role = {
+        item["role"]: item for item in substituted_identity["runtime_files"]
+    }
+    assert (
+        substituted_by_role["freecad_gui"]["sha256"]
+        != runtime_by_role["freecad_gui"]["sha256"]
+    )
+    freecad_path.write_bytes(original_freecad)
+
+    substitute = tmp_path / "substitute-FreeCAD"
+    substitute.write_bytes(original_freecad)
+    freecad_path.unlink()
+    freecad_path.symlink_to(substitute)
+    with pytest.raises(RuntimeError, match="missing, unsafe, or unstable"):
+        _runtime_identity(
+            tmp_path,
+            SOURCE_COMMIT,
+            provider_attester=lambda *_args, **_kwargs: _provider_runtime_record(),
+        )
+    freecad_path.unlink()
+    freecad_path.write_bytes(original_freecad)
 
     (installed / entry).write_text("# stale live entry\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="stale"):
@@ -294,9 +618,9 @@ def test_live_runner_rejects_source_or_readiness_identity_drift(tmp_path: Path) 
             credential_validation_timeout=5,
             probe=lambda *args, **kwargs: readiness,
             process_runner=process_runner,
-            runtime_preparer=lambda root, commit: _runtime_identity_record(commit),
+            runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
             source_verifier=lambda root: SOURCE_COMMIT,
-            runtime_rechecker=lambda root, commit: _runtime_identity_record(commit),
+            runtime_rechecker=lambda root, commit, *_paths: _runtime_identity_record(commit),
         )
 
 
@@ -313,10 +637,36 @@ def _completed_process_result(command, **kwargs):
     return SimpleNamespace(returncode=0, stdout="\nOK\n")
 
 
+def test_live_runner_does_not_trust_or_require_a_stdout_ok_sentinel(
+    tmp_path: Path,
+) -> None:
+    def process_runner(command, **kwargs):
+        result = _completed_process_result(command, **kwargs)
+        result.stdout = "Provider output without a runner sentinel."
+        return result
+
+    result = execute_live_benchmark(
+        freecad=Path("FreeCAD"),
+        freecad_cmd=Path("FreeCADCmd"),
+        run_directory=tmp_path / "run",
+        source_commit=SOURCE_COMMIT,
+        timeout_seconds=1800,
+        readiness_timeout_seconds=30,
+        credential_validation_timeout=5,
+        probe=lambda *args, **kwargs: _readiness(verified=True),
+        process_runner=process_runner,
+        runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
+        source_verifier=lambda root: SOURCE_COMMIT,
+        runtime_rechecker=lambda root, commit, *_paths: _runtime_identity_record(commit),
+    )
+
+    assert result == 0
+
+
 def test_live_runner_rechecks_installed_runtime_after_gui_exit(tmp_path: Path) -> None:
     recheck_count = 0
 
-    def runtime_rechecker(root, commit):
+    def runtime_rechecker(root, commit, *_paths):
         nonlocal recheck_count
         recheck_count += 1
         identity = _runtime_identity_record(commit)
@@ -335,7 +685,7 @@ def test_live_runner_rechecks_installed_runtime_after_gui_exit(tmp_path: Path) -
             credential_validation_timeout=5,
             probe=lambda *args, **kwargs: _readiness(verified=True),
             process_runner=_completed_process_result,
-            runtime_preparer=lambda root, commit: _runtime_identity_record(commit),
+            runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
             source_verifier=lambda root: SOURCE_COMMIT,
             runtime_rechecker=runtime_rechecker,
         )
@@ -357,9 +707,9 @@ def test_nonzero_gui_exit_cannot_pass_live_evidence(tmp_path: Path) -> None:
         credential_validation_timeout=5,
         probe=lambda *args, **kwargs: _readiness(verified=True),
         process_runner=process_runner,
-        runtime_preparer=lambda root, commit: _runtime_identity_record(commit),
+        runtime_preparer=lambda root, commit, *_paths: _runtime_identity_record(commit),
         source_verifier=lambda root: SOURCE_COMMIT,
-        runtime_rechecker=lambda root, commit: _runtime_identity_record(commit),
+        runtime_rechecker=lambda root, commit, *_paths: _runtime_identity_record(commit),
     )
 
     assert result == 1
@@ -454,6 +804,51 @@ def test_runtime_identity_contract_rejects_source_drift() -> None:
 
     identity["source_commit"] = "f" * 40
     with pytest.raises(Exception, match="does not match"):
+        validate_runtime_identity(identity, source_commit=SOURCE_COMMIT)
+
+
+@pytest.mark.parametrize("fault", ("missing", "reordered", "escape", "digest"))
+def test_runtime_identity_contract_rejects_unbound_runtime_files(fault: str) -> None:
+    identity = _runtime_identity_record()
+    if fault == "missing":
+        identity["runtime_files"].pop()
+    elif fault == "reordered":
+        identity["runtime_files"][0], identity["runtime_files"][1] = (
+            identity["runtime_files"][1],
+            identity["runtime_files"][0],
+        )
+    elif fault == "escape":
+        identity["runtime_files"][0]["path"] = "../unbound-FreeCAD"
+    else:
+        identity["runtime_files"][0]["sha256"] = "not-a-digest"
+
+    with pytest.raises(Exception, match="runtime file|file roles"):
+        validate_runtime_identity(identity, source_commit=SOURCE_COMMIT)
+
+
+@pytest.mark.parametrize("fault", ("missing", "reordered", "escape", "digest"))
+def test_runtime_identity_contract_rejects_unbound_provider_components(
+    fault: str,
+) -> None:
+    identity = _runtime_identity_record()
+    components = identity["provider_runtime"]["components"]
+    components.append(
+        {
+            "path": ".pixi/envs/default/lib/provider-module.py",
+            "size": 2,
+            "sha256": "e" * 64,
+        }
+    )
+    if fault == "missing":
+        components.clear()
+    elif fault == "reordered":
+        components[0], components[1] = components[1], components[0]
+    elif fault == "escape":
+        components[0]["path"] = "../provider-python"
+    else:
+        components[0]["sha256"] = "not-a-digest"
+
+    with pytest.raises(Exception, match="provider runtime|Provider runtime"):
         validate_runtime_identity(identity, source_commit=SOURCE_COMMIT)
 
 

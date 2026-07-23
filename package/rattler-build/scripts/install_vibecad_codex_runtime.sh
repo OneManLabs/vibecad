@@ -66,13 +66,35 @@ case "${platform}:${machine}" in
 esac
 
 archive_url="${release_root}/${archive}"
+
+sha256_file() {
+    "${python_executable}" - "$1" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+digest = hashlib.sha256()
+with pathlib.Path(sys.argv[1]).open("rb") as stream:
+    for block in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(block)
+print(digest.hexdigest())
+PY
+}
+
+verify_sha256() {
+    local expected="$1"
+    local target="$2"
+    [[ "$(sha256_file "${target}")" == "${expected}" ]]
+}
+
+script_sha256="$(sha256_file "$0")"
 runtime_spec="$({
     printf '%s\n' \
         "version=${codex_version}" \
         "archive=${archive}:${archive_sha256}" \
-        "license=${license_sha256}"
-    sha256sum "$0"
-} | sha256sum | awk '{print $1}')"
+        "license=${license_sha256}" \
+        "installer=${script_sha256}"
+} | "${python_executable}" -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())')"
 
 smoke_runtime() {
     local output
@@ -99,14 +121,17 @@ download_verified() {
     local url="$1"
     local expected="$2"
     local destination="$3"
-    if [[ -f "${destination}" ]] \
-      && echo "${expected}  ${destination}" | sha256sum --check --status; then
+    if [[ -f "${destination}" ]] && verify_sha256 "${expected}" "${destination}"; then
         return
     fi
     local temporary="${destination}.tmp"
     rm -f "${temporary}"
     curl --fail --location --retry 4 --retry-all-errors --output "${temporary}" "${url}"
-    echo "${expected}  ${temporary}" | sha256sum --check
+    if ! verify_sha256 "${expected}" "${temporary}"; then
+        echo "The downloaded Codex runtime has an invalid SHA-256 value." >&2
+        rm -f "${temporary}"
+        exit 1
+    fi
     mv "${temporary}" "${destination}"
 }
 

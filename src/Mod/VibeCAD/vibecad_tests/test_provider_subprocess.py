@@ -8,13 +8,15 @@ import json
 import sys
 from types import ModuleType, SimpleNamespace
 
+import pytest
+
 import VibeCADProvider as provider
 import VibeCADSession as session
 
 
 class _DelayedPipeMessage:
     def __init__(self) -> None:
-        self.poll_results = iter((False, True, True))
+        self.poll_results = iter((False, True, True, False))
         self.poll_timeouts: list[float] = []
         self.closed = False
 
@@ -100,6 +102,278 @@ def test_clean_exit_drains_delayed_final_pipe_message(monkeypatch) -> None:
     assert context.child_conn.closed
     assert context.parent_conn.closed
     assert 0.2 in context.parent_conn.poll_timeouts
+
+
+class _TerminalPipe:
+    def __init__(self, messages: list[dict[str, object]]) -> None:
+        self.messages = list(messages)
+        self.closed = False
+
+    def poll(self, _timeout: float) -> bool:
+        return bool(self.messages)
+
+    def recv(self) -> dict[str, object]:
+        if not self.messages:
+            raise EOFError
+        return self.messages.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _TerminalProcess:
+    def __init__(self, *, alive: bool, exitcode: int | None) -> None:
+        self.daemon = False
+        self.exitcode = exitcode
+        self.pid = 4321
+        self.alive = alive
+        self.terminated = False
+
+    def start(self) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def join(self, timeout: float) -> None:
+        del timeout
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.alive = False
+        self.exitcode = -15
+
+
+class _TerminalContext:
+    def __init__(self, process: _TerminalProcess, messages: list[dict[str, object]]) -> None:
+        self.parent_conn = _TerminalPipe(messages)
+        self.child_conn = _ChildPipe()
+        self.process = process
+
+    def Pipe(self):
+        return self.parent_conn, self.child_conn
+
+    def Process(self, **_kwargs):
+        return self.process
+
+
+def _run_terminal_context(monkeypatch, context: _TerminalContext):
+    monkeypatch.setattr(
+        provider,
+        "_provider_multiprocessing_context",
+        lambda **_kwargs: context,
+    )
+    return provider._run_provider_subprocess(
+        prompt="smoke",
+        context={},
+        tool_runner=None,
+        model="smoke",
+        api_key="explicit-test-key",
+        reasoning_effort=None,
+        timeout_seconds=1.0,
+        max_turns=1,
+        clear_inherited_modules=False,
+        event_pump=lambda: None,
+        child_main=_unused_child,
+        provider_label="test provider",
+    )
+
+
+def test_final_message_followed_by_hang_is_rejected_and_terminated(monkeypatch) -> None:
+    process = _TerminalProcess(alive=True, exitcode=None)
+    context = _TerminalContext(
+        process,
+        [{"type": "done", "final_output": "must not pass", "raw": None}],
+    )
+
+    with pytest.raises(provider.ProviderUnavailable, match="did not exit"):
+        _run_terminal_context(monkeypatch, context)
+
+    assert process.terminated is True
+
+
+def test_final_message_followed_by_nonzero_exit_is_rejected(monkeypatch) -> None:
+    context = _TerminalContext(
+        _TerminalProcess(alive=False, exitcode=9),
+        [{"type": "done", "final_output": "must not pass", "raw": None}],
+    )
+
+    with pytest.raises(provider.ProviderUnavailable, match="exited with code 9"):
+        _run_terminal_context(monkeypatch, context)
+
+
+def test_second_terminal_message_is_rejected(monkeypatch) -> None:
+    context = _TerminalContext(
+        _TerminalProcess(alive=False, exitcode=0),
+        [
+            {"type": "done", "final_output": "first", "raw": None},
+            {"type": "done", "final_output": "second", "raw": None},
+        ],
+    )
+
+    with pytest.raises(provider.ProviderUnavailable, match="after its final"):
+        _run_terminal_context(monkeypatch, context)
+
+
+def test_provider_context_uses_spawn_without_mutating_global_executable(
+    monkeypatch,
+) -> None:
+    observed: dict[str, object] = {}
+    expected = object()
+    monkeypatch.setattr(
+        provider.multiprocessing,
+        "get_all_start_methods",
+        lambda: ["fork", "spawn"],
+    )
+    monkeypatch.setattr(
+        provider,
+        "_provider_spawn_python_executable",
+        lambda **_kwargs: "/private/test/python",
+    )
+    monkeypatch.setattr(
+        provider.multiprocessing,
+        "get_context",
+        lambda method: observed.setdefault("method", method) and expected,
+    )
+
+    result = provider._provider_multiprocessing_context()
+
+    assert result is expected
+    assert observed == {"method": "spawn"}
+
+
+def test_partial_start_failure_restores_globals_closes_pipes_and_terminates(
+    monkeypatch,
+) -> None:
+    class RecordingLock:
+        active = False
+
+        def __enter__(self):
+            assert self.active is False
+            self.active = True
+            return self
+
+        def __exit__(self, *_args):
+            self.active = False
+
+    lock = RecordingLock()
+    parent_conn = _ChildPipe()
+    child_conn = _ChildPipe()
+    original_stdin = object()
+    executable_calls: list[object] = []
+    prior_executable = b"/private/prior/python"
+
+    class PartlyStartedProcess:
+        daemon = False
+        pid = 9876
+        exitcode = None
+        alive = False
+        terminated = False
+
+        def start(self) -> None:
+            assert lock.active is True
+            assert sys.stdin is not original_stdin
+            assert not hasattr(sys, "frozen")
+            self.alive = True
+            raise RuntimeError("synthetic partial start failure")
+
+        def is_alive(self) -> bool:
+            return self.alive
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.alive = False
+            self.exitcode = -15
+
+        def join(self, timeout: float) -> None:
+            del timeout
+
+    process = PartlyStartedProcess()
+
+    class Context:
+        @staticmethod
+        def Pipe():
+            assert lock.active is True
+            return parent_conn, child_conn
+
+        @staticmethod
+        def Process(**_kwargs):
+            assert lock.active is True
+            return process
+
+    def get_context(**_kwargs):
+        assert lock.active is True
+        return Context()
+
+    def select_executable(**_kwargs):
+        assert lock.active is True
+        return "/private/selected/python"
+
+    def get_executable():
+        assert lock.active is True
+        return prior_executable
+
+    def set_executable(value):
+        assert lock.active is True
+        executable_calls.append(value)
+
+    monkeypatch.setattr(provider, "_PROVIDER_PROCESS_LAUNCH_LOCK", lock)
+    monkeypatch.setattr(provider, "_provider_multiprocessing_context", get_context)
+    monkeypatch.setattr(
+        provider,
+        "_provider_spawn_python_executable",
+        select_executable,
+    )
+    monkeypatch.setattr(
+        provider.multiprocessing.spawn,
+        "get_executable",
+        get_executable,
+    )
+    monkeypatch.setattr(
+        provider.multiprocessing,
+        "set_executable",
+        set_executable,
+    )
+    monkeypatch.setattr(sys, "stdin", original_stdin)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+    with pytest.raises(RuntimeError, match="synthetic partial start failure"):
+        provider._run_provider_subprocess(
+            prompt="smoke",
+            context={},
+            tool_runner=None,
+            model="smoke",
+            api_key="explicit-test-key",
+            reasoning_effort=None,
+            timeout_seconds=1.0,
+            max_turns=1,
+            clear_inherited_modules=False,
+            event_pump=lambda: None,
+            child_main=_unused_child,
+            provider_label="test provider",
+        )
+
+    assert lock.active is False
+    assert sys.stdin is original_stdin
+    assert sys.frozen is True
+    assert executable_calls == ["/private/selected/python", prior_executable]
+    assert parent_conn.closed is True
+    assert child_conn.closed is True
+    assert process.terminated is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf"), 0.0, -1.0, True, "invalid"],
+)
+def test_provider_timeout_rejects_non_finite_or_unbounded_values(value) -> None:
+    with pytest.raises(provider.ProviderUnavailable, match="timeout must"):
+        provider._provider_timeout(value)
+
+
+def test_provider_timeout_allows_an_explicit_bound_or_no_override() -> None:
+    assert provider._provider_timeout(None) == provider.DEFAULT_PROVIDER_TIMEOUT_SECONDS
+    assert provider._provider_timeout(120) == 120.0
 
 
 def _vibescript_mode_context(
@@ -468,6 +742,41 @@ class _OpenAIChildConnection:
 
     def close(self) -> None:
         self.closed = True
+
+
+@pytest.mark.parametrize(
+    ("child_main", "environment_name", "provider_name"),
+    [
+        (provider._openai_child_main, "OPENAI_API_KEY", "OpenAI"),
+        (provider._anthropic_child_main, "ANTHROPIC_API_KEY", "Anthropic"),
+    ],
+)
+def test_provider_child_never_uses_an_ambient_api_key(
+    monkeypatch,
+    child_main,
+    environment_name: str,
+    provider_name: str,
+) -> None:
+    monkeypatch.setenv(environment_name, "ambient-sentinel-secret")
+    connection = _OpenAIChildConnection({})
+
+    child_main(
+        connection,
+        prompt="This must not leave the process.",
+        context={"provider_tool_schemas": []},
+        model="test-model",
+        api_key=None,
+        reasoning_effort=None,
+        timeout_seconds=1.0,
+        max_turns=1,
+        clear_inherited_modules=False,
+    )
+
+    errors = [item for item in connection.sent if item.get("type") == "error"]
+    assert len(errors) == 1
+    assert provider_name in str(errors[0]["error"])
+    assert "ambient-sentinel-secret" not in json.dumps(connection.sent)
+    assert connection.closed is True
 
 
 def test_openai_tool_loop_manages_response_history_without_response_ids(

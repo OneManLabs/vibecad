@@ -2777,6 +2777,87 @@ def _reactivate_scope_document(service: VibeCADService, scope: dict[str, Any]) -
     App.setActiveDocument(target.Name)
 
 
+_TERMINAL_PREPARED_ACCEPTANCE_STATES = frozenset(
+    {
+        "accepted",
+        "no_mutation",
+        "recovered",
+        "rejected",
+        "restored",
+        "rolled_back",
+    }
+)
+
+
+def _cleanup_failed_prepared_turn(
+    *,
+    capability: Any,
+    coordinator: VibeCADAcceptanceCoordinator,
+    prepared_acceptance: Any,
+    restore_live: Callable[..., Any],
+    write_metadata: Callable[..., Any],
+    active_service: VibeCADService,
+    scope: dict[str, Any],
+    document_thread_dispatch: DocumentThreadDispatch | None,
+    reason: str,
+    original_error: BaseException,
+) -> None:
+    """Revoke, roll back when needed, and reactivate after any guarded failure."""
+
+    cleanup_failures: list[tuple[str, BaseException]] = []
+    try:
+        _revoke_prepared_mutation_capability(capability)
+    except BaseException as exc:
+        cleanup_failures.append(("revoke the prepared mutation capability", exc))
+
+    journal_state = ""
+    try:
+        journal = json.loads(
+            prepared_acceptance.journal_path.read_text(encoding="utf-8")
+        )
+        if isinstance(journal, dict):
+            journal_state = str(journal.get("state") or "")
+    except (OSError, ValueError, AttributeError, TypeError):
+        # A missing or unreadable journal is not proof of a terminal state.
+        # Attempt the fail-closed rollback below.
+        pass
+
+    if journal_state not in _TERMINAL_PREPARED_ACCEPTANCE_STATES:
+        try:
+            coordinator.reject(
+                prepared_acceptance,
+                restore_live=restore_live,
+                write_metadata=write_metadata,
+                reason=reason,
+            )
+        except BaseException as exc:
+            cleanup_failures.append(("restore the prepared candidate", exc))
+
+    try:
+        _on_document_thread(
+            document_thread_dispatch,
+            lambda: _reactivate_scope_document(active_service, scope),
+        )
+    except BaseException as exc:
+        cleanup_failures.append(("reactivate the scoped CAD document", exc))
+
+    if not cleanup_failures:
+        return
+
+    action, cleanup_error = cleanup_failures[0]
+    try:
+        cleanup_error.add_note(
+            f"VibeCAD could not {action} after: {original_error}"
+        )
+        for later_action, later_error in cleanup_failures[1:]:
+            cleanup_error.add_note(
+                f"VibeCAD also could not {later_action}: {later_error}"
+            )
+    except (AttributeError, TypeError):
+        pass
+    raise cleanup_error from original_error
+
+
 def _run_session_turn(
     prompt: str,
     *,
@@ -2917,10 +2998,6 @@ def _run_session_turn(
         restore_live=restore_live,
         write_metadata=write_metadata,
     )
-    prepared_acceptance = coordinator.prepare(persistence["file_path"], save_copy)
-    prepared_mutation_capability = _issue_prepared_mutation_capability(
-        active_service, prepared_acceptance
-    )
     tool_trace: list[dict[str, Any]] = []
     active_provider = provider or _on_document_thread(
         document_thread_dispatch,
@@ -2962,46 +3039,56 @@ def _run_session_turn(
         },
     )
     _emit_run_state(progress_callback, "Planning")
-    tool_runner = make_provider_tool_runner(
-        active_service,
-        tool_trace=tool_trace,
-        progress_callback=progress_callback,
-        cancellation_check=cancellation_check,
-        steering_check=steering_check,
-        question_callback=question_callback,
-        session_trigger=session_trigger,
-        document_thread_dispatch=document_thread_dispatch,
-        turn_surface=(
-            dict(context["provider_tool_surface"])
-            if isinstance(context.get("provider_tool_surface"), dict)
-            and context["provider_tool_surface"].get("kind") == "turn_start_snapshot"
-            else None
-        ),
-        turn_schemas=[
-            dict(schema)
-            for schema in list(context.get("provider_tool_schemas") or [])
-            if isinstance(schema, dict)
-        ],
-        turn_modeling_surface=(
-            dict(context["modeling_surface"])
-            if isinstance(context.get("modeling_surface"), dict)
-            else None
-        ),
-        turn_registered_import_assets=(
-            dict(context["registered_import_assets"])
-            if isinstance(context.get("registered_import_assets"), dict)
-            else None
-        ),
-        managed_policy=managed_policy,
-        provider_online=provider_online,
-        _prepared_mutation_capability=prepared_mutation_capability,
-    )
-    _emit(
-        progress_callback,
-        {"event": "provider_turn_started", "provider": provider_name, "turn": 1},
-    )
-    _emit_run_state(progress_callback, "Creating preview")
+    prepared_mutation_capability = None
+    prepared_acceptance = coordinator.prepare(persistence["file_path"], save_copy)
     try:
+        prepared_mutation_capability = _issue_prepared_mutation_capability(
+            active_service, prepared_acceptance
+        )
+        tool_runner = make_provider_tool_runner(
+            active_service,
+            tool_trace=tool_trace,
+            progress_callback=progress_callback,
+            cancellation_check=cancellation_check,
+            steering_check=steering_check,
+            question_callback=question_callback,
+            session_trigger=session_trigger,
+            document_thread_dispatch=document_thread_dispatch,
+            turn_surface=(
+                dict(context["provider_tool_surface"])
+                if isinstance(context.get("provider_tool_surface"), dict)
+                and context["provider_tool_surface"].get("kind")
+                == "turn_start_snapshot"
+                else None
+            ),
+            turn_schemas=[
+                dict(schema)
+                for schema in list(context.get("provider_tool_schemas") or [])
+                if isinstance(schema, dict)
+            ],
+            turn_modeling_surface=(
+                dict(context["modeling_surface"])
+                if isinstance(context.get("modeling_surface"), dict)
+                else None
+            ),
+            turn_registered_import_assets=(
+                dict(context["registered_import_assets"])
+                if isinstance(context.get("registered_import_assets"), dict)
+                else None
+            ),
+            managed_policy=managed_policy,
+            provider_online=provider_online,
+            _prepared_mutation_capability=prepared_mutation_capability,
+        )
+        _emit(
+            progress_callback,
+            {
+                "event": "provider_turn_started",
+                "provider": provider_name,
+                "turn": 1,
+            },
+        )
+        _emit_run_state(progress_callback, "Creating preview")
         try:
             result = _run_provider(
                 active_provider,
@@ -3223,23 +3310,18 @@ def _run_session_turn(
             tool_trace=tool_trace,
         )
     except ProviderUnavailable as exc:
-        journal_state = ""
-        try:
-            journal_state = str(json.loads(prepared_acceptance.journal_path.read_text(encoding="utf-8")).get("state") or "")
-        except (OSError, ValueError):
-            pass
-        if journal_state not in {
-            "rolled_back",
-            "rejected",
-            "accepted",
-            "no_mutation",
-        }:
-            coordinator.reject(
-                prepared_acceptance,
-                restore_live=restore_live,
-                write_metadata=write_metadata,
-                reason=str(exc),
-            )
+        _cleanup_failed_prepared_turn(
+            capability=prepared_mutation_capability,
+            coordinator=coordinator,
+            prepared_acceptance=prepared_acceptance,
+            restore_live=restore_live,
+            write_metadata=write_metadata,
+            active_service=active_service,
+            scope=scope,
+            document_thread_dispatch=document_thread_dispatch,
+            reason=str(exc),
+            original_error=exc,
+        )
         provider_error = str(exc)
         final_output = f"{provider_name} failed before returning a usable AI result: {provider_error}"
         _emit(
@@ -3271,6 +3353,23 @@ def _run_session_turn(
             tool_trace=tool_trace,
             error=str(exc),
         )
+    except BaseException as exc:
+        _cleanup_failed_prepared_turn(
+            capability=prepared_mutation_capability,
+            coordinator=coordinator,
+            prepared_acceptance=prepared_acceptance,
+            restore_live=restore_live,
+            write_metadata=write_metadata,
+            active_service=active_service,
+            scope=scope,
+            document_thread_dispatch=document_thread_dispatch,
+            reason=(
+                "The candidate turn failed before it reached a recorded "
+                "terminal acceptance state."
+            ),
+            original_error=exc,
+        )
+        raise
 
 
 def run_prompt(

@@ -8,7 +8,6 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -24,6 +23,7 @@ from tools.probe_provider_readiness import run_probe  # noqa: E402
 from VibeCADLiveBenchmark import (  # noqa: E402
     atomic_write_json,
     readiness_digest,
+    runtime_identity_digest,
     validate_live_readiness,
     validate_runtime_identity,
     validate_unrated_live_run,
@@ -33,6 +33,21 @@ from tools.verify_vibecad_source_identity import (  # noqa: E402
     source_manifest,
     verify_source_identity,
 )
+from tools.vibecad_secure_process import (  # noqa: E402
+    create_private_run_directory,
+    minimal_child_environment,
+    run_bounded_process,
+    validate_finite_timeout,
+)
+from tools.vibecad_benchmark_evidence_io import (  # noqa: E402
+    EvidenceIOError,
+    load_bounded_json,
+    open_bounded_regular_file,
+)
+from tools.provider_runtime_attestation import attest_provider_runtime  # noqa: E402
+
+
+MAX_RUNTIME_COMPONENT_BYTES = 1024 * 1024 * 1024
 
 
 def _source_commit(root: Path) -> str:
@@ -75,7 +90,59 @@ def _source_commit(root: Path) -> str:
     return commit.lower()
 
 
-def _runtime_identity(root: Path, source_commit: str) -> dict[str, Any]:
+def _runtime_component(
+    root: Path,
+    *,
+    role: str,
+    path: Path,
+) -> dict[str, Any]:
+    lexical_root = Path(root).absolute()
+    lexical_path = Path(path).absolute()
+    try:
+        relative = lexical_path.relative_to(lexical_root)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"The live benchmark {role} is outside the exact source root."
+        ) from exc
+    try:
+        with open_bounded_regular_file(
+            lexical_path,
+            max_bytes=MAX_RUNTIME_COMPONENT_BYTES,
+            label=f"live runtime {role}",
+            retain_data=False,
+        ) as snapshot:
+            snapshot.verify_unchanged()
+            return {
+                "role": role,
+                "path": relative.as_posix(),
+                "size": snapshot.size,
+                "sha256": snapshot.sha256,
+            }
+    except (EvidenceIOError, OSError) as exc:
+        raise RuntimeError(
+            f"The live benchmark {role} is missing, unsafe, or unstable."
+        ) from exc
+
+
+def _native_runtime_library(root: Path, stem: str) -> Path:
+    candidates = (
+        root / "build" / "release" / "lib" / f"lib{stem}.dylib",
+        root / "build" / "release" / "lib" / f"lib{stem}.so",
+        root / "build" / "release" / "bin" / f"{stem}.dll",
+    )
+    for candidate in candidates:
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+    raise RuntimeError(f"The live benchmark {stem} native library is not installed.")
+
+
+def _runtime_identity(
+    root: Path,
+    source_commit: str,
+    freecad: Path | None = None,
+    freecad_cmd: Path | None = None,
+    provider_attester: Callable[..., dict[str, Any]] = attest_provider_runtime,
+) -> dict[str, Any]:
     source = root / "src" / "Mod" / "VibeCAD"
     installed = root / "build" / "release" / "Mod" / "VibeCAD"
     verified = verify_source_identity(source, installed)
@@ -105,19 +172,79 @@ def _runtime_identity(root: Path, source_commit: str) -> dict[str, Any]:
             manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
     ).hexdigest()
+    selected_freecad = freecad or root / "build" / "release" / "bin" / "FreeCAD"
+    selected_freecad_cmd = (
+        freecad_cmd or root / "build" / "release" / "bin" / "FreeCADCmd"
+    )
+    runtime_files = [
+        _runtime_component(
+            root,
+            role="benchmark_evidence_io_helper",
+            path=root / "tools" / "vibecad_benchmark_evidence_io.py",
+        ),
+        _runtime_component(root, role="freecad_gui", path=selected_freecad),
+        _runtime_component(root, role="freecad_cmd", path=selected_freecad_cmd),
+        _runtime_component(
+            root,
+            role="freecad_app_library",
+            path=_native_runtime_library(root, "FreeCADApp"),
+        ),
+        _runtime_component(
+            root,
+            role="freecad_gui_library",
+            path=_native_runtime_library(root, "FreeCADGui"),
+        ),
+        _runtime_component(
+            root,
+            role="provider_runtime_attestation",
+            path=root / "tools" / "provider_runtime_attestation.py",
+        ),
+        _runtime_component(
+            root,
+            role="benchmark_launcher",
+            path=root / "tools" / "run_live_tier1_benchmark.py",
+        ),
+        _runtime_component(
+            root,
+            role="readiness_probe",
+            path=root / "tools" / "probe_provider_readiness.py",
+        ),
+        _runtime_component(
+            root,
+            role="readiness_child",
+            path=root / "tools" / "provider_readiness_child.py",
+        ),
+        _runtime_component(
+            root,
+            role="secure_process_helper",
+            path=root / "tools" / "vibecad_secure_process.py",
+        ),
+    ]
+    runtime_files.sort(key=lambda item: str(item["role"]))
+    provider_runtime = provider_attester(
+        root,
+        selected_freecad_cmd,
+    )
     return {
-        "schema": "vibecad-live-runtime-identity-v1",
-        "version": 1,
+        "schema": "vibecad-live-runtime-identity-v3",
+        "version": 3,
         "source_commit": source_commit,
         "module_file_count": verified["file_count"],
         "module_manifest_sha256": manifest_digest,
         "gui_entry_sha256": source_entry_sha,
         "gui_runner_sha256": sha256_file(source_runner),
         "case_catalog_sha256": sha256_file(source_catalog),
+        "runtime_files": runtime_files,
+        "provider_runtime": provider_runtime,
     }
 
 
-def prepare_runtime(root: Path, source_commit: str) -> dict[str, Any]:
+def prepare_runtime(
+    root: Path,
+    source_commit: str,
+    freecad: Path | None = None,
+    freecad_cmd: Path | None = None,
+) -> dict[str, Any]:
     """Refresh and verify the copied VibeCAD runtime before provider readiness."""
 
     completed = subprocess.run(
@@ -142,7 +269,7 @@ def prepare_runtime(root: Path, source_commit: str) -> dict[str, Any]:
             "The VibeCAD resource-copy build failed before provider readiness: "
             + str(completed.stdout or "")[-2000:]
         )
-    return _runtime_identity(root, source_commit)
+    return _runtime_identity(root, source_commit, freecad, freecad_cmd)
 
 
 def execute_live_benchmark(
@@ -155,24 +282,38 @@ def execute_live_benchmark(
     readiness_timeout_seconds: float,
     credential_validation_timeout: float,
     probe: Callable[..., dict[str, Any]] = run_probe,
-    process_runner: Callable[..., Any] = subprocess.run,
-    runtime_preparer: Callable[[Path, str], dict[str, Any]] = prepare_runtime,
+    process_runner: Callable[..., Any] | None = None,
+    runtime_preparer: Callable[..., dict[str, Any]] = prepare_runtime,
     source_verifier: Callable[[Path], str] = _source_commit,
-    runtime_rechecker: Callable[[Path, str], dict[str, Any]] = _runtime_identity,
+    runtime_rechecker: Callable[..., dict[str, Any]] = _runtime_identity,
 ) -> int:
     """Run the GUI child only after the stronger readiness contract passes."""
 
-    if timeout_seconds < MIN_LIVE_TIMEOUT_SECONDS:
-        raise ValueError(
-            "The GUI timeout is shorter than the seven-case execution and validation bound."
-        )
-    run_directory.mkdir(parents=True, exist_ok=False)
+    timeout_seconds = validate_finite_timeout(
+        timeout_seconds,
+        label="The GUI timeout",
+        minimum=MIN_LIVE_TIMEOUT_SECONDS,
+        minimum_inclusive=True,
+        maximum=3600,
+    )
+    readiness_timeout_seconds = validate_finite_timeout(
+        readiness_timeout_seconds,
+        label="The readiness timeout",
+        maximum=60,
+    )
+    credential_validation_timeout = validate_finite_timeout(
+        credential_validation_timeout,
+        label="The credential check timeout",
+        maximum=15,
+    )
+    create_private_run_directory(run_directory)
     runtime_identity = validate_runtime_identity(
-        runtime_preparer(ROOT, source_commit), source_commit=source_commit
+        runtime_preparer(ROOT, source_commit, freecad, freecad_cmd),
+        source_commit=source_commit,
     )
     runtime_identity_path = run_directory / "runtime-identity.json"
     atomic_write_json(runtime_identity_path, runtime_identity)
-    runtime_identity_sha256 = sha256_file(runtime_identity_path)
+    runtime_identity_sha256 = runtime_identity_digest(runtime_identity)
     readiness_path = run_directory / "provider-readiness.json"
     readiness = probe(
         freecad_cmd,
@@ -193,29 +334,37 @@ def execute_live_benchmark(
     if launch_source_commit != source_commit:
         raise RuntimeError("The source commit changed after provider readiness.")
     launch_runtime_identity = validate_runtime_identity(
-        runtime_rechecker(ROOT, source_commit), source_commit=source_commit
+        runtime_rechecker(ROOT, source_commit, freecad, freecad_cmd),
+        source_commit=source_commit,
     )
     if launch_runtime_identity != runtime_identity:
         raise RuntimeError("The installed runtime changed after provider readiness.")
 
     raw_path = run_directory / "tier1-live-unrated-run.json"
-    environment = dict(os.environ)
-    environment.update(
-        QT_QPA_PLATFORM="offscreen",
-        VIBECAD_LIVE_BENCHMARK_OUTPUT=str(run_directory.resolve()),
-        VIBECAD_LIVE_BENCHMARK_READINESS=str(readiness_path.resolve()),
-        VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT=source_commit,
-        VIBECAD_LIVE_BENCHMARK_PROVIDER=str(checked_readiness["provider"]),
-        VIBECAD_LIVE_BENCHMARK_MODEL=str(checked_readiness["model"]),
-        VIBECAD_LIVE_BENCHMARK_READINESS_SHA256=readiness_digest(
-            checked_readiness
-        ),
-        VIBECAD_LIVE_BENCHMARK_RUNTIME_SHA256=runtime_identity_sha256,
-        VIBECAD_LIVE_BENCHMARK_RUNTIME_IDENTITY=str(
-            runtime_identity_path.resolve()
-        ),
+    environment = minimal_child_environment(
+        {
+            "QT_QPA_PLATFORM": "offscreen",
+            "VIBECAD_LIVE_BENCHMARK_OUTPUT": str(run_directory.resolve()),
+            "VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT": source_commit,
+            "VIBECAD_LIVE_BENCHMARK_PROVIDER": str(checked_readiness["provider"]),
+            "VIBECAD_LIVE_BENCHMARK_MODEL": str(checked_readiness["model"]),
+            "VIBECAD_LIVE_BENCHMARK_READINESS_SHA256": readiness_digest(
+                checked_readiness
+            ),
+            "VIBECAD_LIVE_BENCHMARK_READINESS_JSON": json.dumps(
+                checked_readiness,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "VIBECAD_LIVE_BENCHMARK_RUNTIME_SHA256": runtime_identity_sha256,
+            "VIBECAD_LIVE_BENCHMARK_RUNTIME_PATH": str(
+                runtime_identity_path.resolve()
+            ),
+        }
     )
-    completed = process_runner(
+    runner = process_runner or run_bounded_process
+    completed = runner(
         [str(freecad), "-t", "TestVibeCADLiveTier1Benchmark"],
         cwd=ROOT,
         env=environment,
@@ -230,45 +379,62 @@ def execute_live_benchmark(
     if post_run_source_commit != source_commit:
         raise RuntimeError("The source commit or clean-tree state changed during the live run.")
     post_run_runtime_identity = validate_runtime_identity(
-        runtime_rechecker(ROOT, source_commit), source_commit=source_commit
+        runtime_rechecker(ROOT, source_commit, freecad, freecad_cmd),
+        source_commit=source_commit,
     )
     if post_run_runtime_identity != runtime_identity:
         raise RuntimeError("The installed runtime changed during the live run.")
-    if not raw_path.is_file():
+    if not raw_path.exists():
         print(str(completed.stdout or "")[-4000:])
         raise RuntimeError("The live GUI benchmark produced no raw evidence file.")
-    raw = json.loads(raw_path.read_text(encoding="utf-8"))
-    validate_unrated_live_run(raw)
-    expected_readiness_digest = readiness_digest(checked_readiness)
-    if (
-        raw.get("provider") != checked_readiness["provider"]
-        or raw.get("model") != checked_readiness["model"]
-        or raw.get("source_commit") != source_commit
-        or raw.get("readiness_sha256") != expected_readiness_digest
-        or raw.get("runtime_identity_sha256") != runtime_identity_sha256
-    ):
-        raise RuntimeError(
-            "The live GUI evidence does not match the verified provider, model, source, and readiness identity."
-        )
-    reported_ok = "\nOK\n" in str(completed.stdout or "")
+    raw_snapshot, raw = load_bounded_json(
+        raw_path,
+        max_bytes=16 * 1024 * 1024,
+        label="raw live benchmark result",
+    )
+    with raw_snapshot:
+        if not isinstance(raw, dict):
+            raise RuntimeError("The live GUI benchmark evidence is not an object.")
+        validate_unrated_live_run(raw, require_scorable=False)
+        expected_readiness_digest = readiness_digest(checked_readiness)
+        if (
+            raw.get("provider") != checked_readiness["provider"]
+            or raw.get("model") != checked_readiness["model"]
+            or raw.get("source_commit") != source_commit
+            or raw.get("readiness_sha256") != expected_readiness_digest
+            or raw.get("runtime_identity_sha256") != runtime_identity_sha256
+        ):
+            raise RuntimeError(
+                "The live GUI evidence does not match the verified provider, "
+                "model, source, and readiness identity."
+            )
+        raw_snapshot.verify_unchanged()
+    # FreeCAD's text runner can print arbitrary provider-controlled output.
+    # Treat only the process exit code and the validated evidence file as the
+    # completion signal; an "OK" line in stdout is not an authority boundary.
+    reported_ok = int(completed.returncode) == 0
     case_passed = all(
         item.get("passed") is True for item in raw.get("case_attempts", [])
     )
     raw["runner"] = {
         "attempt": 1,
         "case_evidence_passed": (
-            case_passed and int(completed.returncode) == 0 and reported_ok
+            case_passed and int(completed.returncode) == 0
         ),
         "gui_runner_exit_code": int(completed.returncode),
         "gui_runner_reported_ok": reported_ok,
     }
-    validate_unrated_live_run(raw, require_runner_result=True)
+    validate_unrated_live_run(
+        raw,
+        require_runner_result=True,
+        require_scorable=False,
+    )
     atomic_write_json(raw_path, raw)
     print(
         "The live run retained seven unrated case attempts. "
         "Apply a separate human rating set before scoring."
     )
-    return 0 if case_passed and reported_ok and completed.returncode == 0 else 1
+    return 0 if case_passed and completed.returncode == 0 else 1
 
 
 def main() -> int:
@@ -310,7 +476,8 @@ def main() -> int:
     return execute_live_benchmark(
         freecad=(ROOT / args.freecad).resolve(),
         freecad_cmd=(ROOT / args.freecad_cmd).resolve(),
-        run_directory=(ROOT / args.output / run_id).resolve(),
+        # Keep each path component visible to the no-follow directory creator.
+        run_directory=(ROOT / args.output / run_id).absolute(),
         source_commit=_source_commit(ROOT),
         timeout_seconds=args.timeout,
         readiness_timeout_seconds=args.readiness_timeout,

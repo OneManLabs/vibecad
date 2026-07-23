@@ -512,3 +512,142 @@ source-security, dependency, performance, and clean-install gates for that exact
 commit. Keep deterministic and live-model benchmark rates separate by provider
 and model. Production signing and notarization remain blocked only by the
 acknowledged Apple credentials.
+
+## Restart checkpoint: 2026-07-22
+
+Milestone: P4-005 live benchmark security and macOS developer runtime.
+
+Implemented: The Apple Silicon developer executables build and start. A native
+GUI smoke created one fully constrained Part Design Body, Sketch, and Pad through
+the normal session. It emitted all seven run states, accepted exactly one
+revision, saved and reopened the FCStd file, and completed STEP and STL round
+trips. The pinned Codex app-server 0.144.5 is installed in the local developer
+build. Its runtime health and account-read smoke pass. No ChatGPT account is
+signed in to the private VibeCAD Codex home.
+
+Implemented: Failed live-provider calls now retain all seven case records without
+claiming unknown token use as zero. Incomplete usage makes the run unscorable.
+Request-turn binding rejects duplicate, mixed, replayed, decreasing, nonfinite,
+and oversized usage evidence. Provider text and reasoning deltas retain only
+bounded length and SHA-256 evidence. Partial metrics use a bounded version-2
+contract and throttled checkpoints.
+
+Implemented: The live runner uses a minimal child environment, bounded output,
+private run directories, and process-group cleanup. macOS process descendants
+are removed after normal exit and timeout. Provider subprocess start and global
+spawn state are serialized. Partial-start failures close pipes and terminate the
+child. Session cleanup now starts immediately after acceptance preparation and
+keeps rollback failures fail-closed.
+
+Implemented: The score tool uses stable no-follow descriptors for the raw run,
+human ratings, readiness record, runtime identity, and case artifacts. It rejects
+symbolic links, duplicate keys, hard-linked artifacts, path escapes, aliases,
+content changes, and existing output files. It keeps all evidence descriptors
+open through exclusive publication.
+
+Files changed: Live benchmark contracts and runner, provider and session process
+boundaries, secure process and evidence helpers, focused tests, the Codex runtime
+installer, and one partial provider-runtime attestation helper.
+
+Tests added: Live usage-evidence tests, score-integrity tests, secure-process
+tests, provider partial-start and global-state tests, and session cleanup fault
+tests.
+
+Tests run: The combined live-usage, live-runner, score-integrity, and readiness
+group passed 87 tests. The secure-process and live evidence group passed 82
+tests. The score-integrity group passed 21 tests. Provider and session focused
+tests passed 55 tests. The macOS GUI developer smoke passed. The Codex app-server
+execution smoke passed in 0.264 seconds.
+
+Results: The developer executable is available for macOS testing. P4-005 remains
+in progress. The complete Python and CTest regressions have not run after these
+changes. No live model prompt was sent. No Tier 1 human score exists.
+
+Known issues: `tools/provider_runtime_attestation.py` is a partial, untested
+change. It is not yet connected to the versioned runtime identity. The score
+tool validates the retained runtime identity file but does not yet re-open and
+verify each declared runtime component. The normal GUI startup can report that
+the Help and Tools menus are not available during early VibeCAD menu
+registration. The portable Codex runtime installer now uses Python for SHA-256
+verification on macOS, but its focused regression test is not yet added.
+
+Exact next task: Finish the provider-runtime attestation integration. Bind the
+selected provider Python executable, loaded provider dependencies, and native
+libraries to the runtime identity. Add tamper tests. Then run all focused P4
+tests, rebuild `VibeCADScripts`, run the complete VibeCAD Python suite, run
+representative native CTests, and run the complete CTest inventory. Fix the
+macOS Help and Tools menu registration timing after the security boundary is
+green.
+
+External blockers: ChatGPT browser sign-in needs the user to complete the OpenAI
+account flow. Production signing and notarization need Apple credentials. These
+items do not block developer executable tests or remaining implementation.
+
+## P4-005 provider-runtime security checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark security.
+
+Implemented: VibeCAD now attests the exact Python selected by
+`VibeCADProvider` through the built `FreeCADCmd` process. The version-3 runtime
+identity binds that Python executable, 947 loaded Python module files, the
+OpenAI, HTTPX, and HTTPCore distributions, all other loaded distributions, and
+41 loaded non-system native libraries. The current identity contains 3,365
+unique content-bound files. Attestation runs with a minimal environment, a
+private directory, finite time and output limits, and no ambient provider
+credential or Python loader variables.
+
+Implemented: The GUI runner reads the 668-KiB runtime identity from its protected
+single-link evidence file instead of placing it in one environment variable. It
+verifies the file digest and contract before execution. The launcher repeats
+source and runtime attestation before and after the GUI run. The score tool
+reopens and hashes every declared provider component before scoring and again
+before exclusive report publication. It rejects path escapes, links, aliases,
+size changes, and digest changes.
+
+Implemented: The pinned Codex app-server 0.144.5 installer now uses the selected
+Python for portable SHA-256 checks. Its real cached-archive regression installs
+the arm64 runtime, checks metadata and executable mode, and proves that a second
+run is stable. The user completed ChatGPT subscription sign-in. A private
+runtime check reports `account_present: true`; no credential value was read or
+printed.
+
+Files changed: Provider runtime attestation, live benchmark runtime contract,
+launcher, GUI runner, score verifier, provider process boundary, session cleanup,
+secure process and evidence I/O helpers, the Codex runtime installer, focused
+tests, and project records.
+
+Tests added: Exact provider attestation and repeatability, ambient-variable
+removal, symbolic-link rejection, runtime-component contract faults,
+score-time component tamper rejection, portable Codex runtime installation,
+live usage completeness, score integrity, provider process cleanup, and session
+rollback faults.
+
+Tests run: The focused benchmark and persistence security group passed 162
+tests. Runtime attestation and installer tests passed 4 tests. After the final
+runtime-contract edit, the complete VibeCAD Python suite passed 1,188 tests with
+5 skips in 26.05 seconds. Three representative native VibeCAD CTests passed in
+11.27 seconds. The final complete 1,690-test CTest inventory passed all 1,683
+enabled tests in 36.56 seconds, with
+3 expected skips and 7 registered disabled tests.
+
+Results: The provider-runtime security boundary passes its local implementation
+and regression gates. P4-005 remains in progress until the signed-in seven-case
+live run has complete evidence, independent human ratings, and a valid score.
+No live benchmark prompt has been sent at this checkpoint.
+
+Benchmark impact: The signed-in provider is ready for the first exact-source
+live Tier 1 run. No live-model pass rate is claimed yet.
+
+Known issues: A direct offscreen GUI smoke could not create an OpenGL context.
+Its unittest reported `OK`, but the process exited with code 134, so it is not
+counted as a clean GUI process pass. Normal developer GUI use works. Early Help
+and Tools menu registration can still report warnings.
+
+Next milestone: Commit this tested security unit to the OneManLabs branch. Run
+the seven live Tier 1 cases from the clean exact commit, retain all success and
+failure evidence, apply an independent content-bound human rating set, and
+score the result. Then fix the early macOS menu-registration warnings.
+
+External blockers: Production Developer ID signing and Apple notarization still
+need the acknowledged Apple credentials. They do not block the developer
+executable or the live benchmark.

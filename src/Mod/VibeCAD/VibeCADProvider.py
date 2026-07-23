@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import multiprocessing
+import multiprocessing.spawn
 import os
 from pathlib import Path
 import signal
@@ -48,6 +50,8 @@ ANTHROPIC_ADAPTIVE_EFFORT = {
 }
 ANTHROPIC_STREAM_MAX_ATTEMPTS = 3
 OPENAI_SDK_MAX_RETRIES = 2
+DEFAULT_PROVIDER_TIMEOUT_SECONDS = 600.0
+_PROVIDER_PROCESS_LAUNCH_LOCK = threading.RLock()
 
 
 VIBECAD_SYSTEM_INSTRUCTIONS = """You are VibeCAD, a principal mechanical design engineer operating the user's live FreeCAD document through the supplied tools. The current user message is the authority. A simple solid that only resembles the request is a failure.
@@ -265,7 +269,7 @@ class OpenAIProvider(BaseProvider):
         model: str = "gpt-5.5",
         api_key: str | None = None,
         reasoning_effort: str = "high",
-        timeout_seconds: float | None = None,
+        timeout_seconds: float | None = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
         max_turns: int | None = None,
         base_url: str | None = None,
         web_search_enabled: bool = False,
@@ -564,7 +568,7 @@ class ChatGPTSubscriptionProvider(BaseProvider):
         self,
         model: str = "",
         reasoning_effort: str = "high",
-        timeout_seconds: float | None = None,
+        timeout_seconds: float | None = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
         web_search_enabled: bool = False,
         skills_enabled: bool = False,
     ) -> None:
@@ -1016,7 +1020,7 @@ class AnthropicProvider(BaseProvider):
         model: str = "claude-sonnet-5",
         api_key: str | None = None,
         reasoning_effort: str = "high",
-        timeout_seconds: float | None = None,
+        timeout_seconds: float | None = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
         max_turns: int | None = None,
         base_url: str | None = None,
         web_search_enabled: bool = False,
@@ -1094,6 +1098,26 @@ def _provider_reasoning_effort(value: str | None) -> str | None:
     return clean
 
 
+def _provider_timeout(value: float | None) -> float:
+    """Reject a malformed provider deadline instead of removing the limit."""
+
+    if value is None:
+        return DEFAULT_PROVIDER_TIMEOUT_SECONDS
+    if isinstance(value, bool):
+        raise ProviderUnavailable("The provider timeout must be a finite number.")
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ProviderUnavailable(
+            "The provider timeout must be a finite number."
+        ) from exc
+    if not math.isfinite(timeout) or timeout <= 0 or timeout > 3600:
+        raise ProviderUnavailable(
+            "The provider timeout must be finite, greater than zero, and at most one hour."
+        )
+    return timeout
+
+
 def _provider_windows_gui_session() -> bool:
     if sys.platform != "win32":
         return False
@@ -1110,10 +1134,7 @@ def _provider_windows_gui_session() -> bool:
 def _provider_spawn_python_executable(
     prefer_windowless: bool | None = None,
 ) -> str | None:
-    if sys.platform not in {"darwin", "win32"}:
-        return None
-
-    if sys.platform == "darwin":
+    if sys.platform != "win32":
         candidates: list[Path] = []
         current_executable = Path(sys.executable or "")
         if current_executable.name.startswith("python"):
@@ -1169,38 +1190,20 @@ def _provider_multiprocessing_context(
     prefer_windowless_python: bool | None = None,
 ) -> multiprocessing.context.BaseContext:
     start_methods = multiprocessing.get_all_start_methods()
-    if sys.platform == "darwin":
-        python_executable = _provider_spawn_python_executable()
-        if not python_executable:
-            raise ProviderUnavailable(
-                "VibeCAD cannot start the AI provider process because the packaged "
-                "macOS Python executable was not found."
-            )
-        if "spawn" not in start_methods:
-            raise ProviderUnavailable(
-                "VibeCAD cannot start the AI provider process because Python spawn "
-                "support is unavailable on macOS."
-            )
-        multiprocessing.set_executable(python_executable)
-        return multiprocessing.get_context("spawn")
-
-    if "fork" in start_methods:
-        return multiprocessing.get_context("fork")
-
-    if sys.platform == "win32":
-        python_executable = _provider_spawn_python_executable(
-            prefer_windowless=prefer_windowless_python
+    if "spawn" not in start_methods:
+        raise ProviderUnavailable(
+            "VibeCAD cannot start the AI provider process because Python spawn "
+            "support is unavailable."
         )
-        if not python_executable:
-            raise ProviderUnavailable(
-                "VibeCAD cannot start the AI provider process because python.exe "
-                "or pythonw.exe was not found in the packaged runtime."
-            )
-        multiprocessing.set_executable(python_executable)
-
-    if "spawn" in start_methods:
-        return multiprocessing.get_context("spawn")
-    return multiprocessing.get_context()
+    python_executable = _provider_spawn_python_executable(
+        prefer_windowless=prefer_windowless_python
+    )
+    if not python_executable:
+        raise ProviderUnavailable(
+            "VibeCAD cannot start the AI provider process because a packaged "
+            "Python executable was not found."
+        )
+    return multiprocessing.get_context("spawn")
 
 
 @contextmanager
@@ -1216,7 +1219,7 @@ def _provider_spawn_bootstrap_environment():
     command line.
     """
 
-    if sys.platform not in {"darwin", "win32"} or not getattr(sys, "frozen", False):
+    if not getattr(sys, "frozen", False):
         yield
         return
 
@@ -1296,6 +1299,97 @@ def _provider_subprocess_smoke(
         )
 
 
+def _provider_result_after_clean_exit(
+    process: Any,
+    parent_conn: Any,
+    message: dict[str, Any],
+    *,
+    provider_label: str,
+    deadline: float | None,
+) -> ProviderResult:
+    """Accept one final message only after the provider child exits cleanly."""
+
+    exit_timeout = 1.0
+    if deadline is not None:
+        exit_timeout = min(exit_timeout, max(0.0, deadline - time.monotonic()))
+    process.join(timeout=exit_timeout)
+    if process.is_alive():
+        raise ProviderUnavailable(
+            f"{provider_label} did not exit after sending its final result."
+        )
+    if process.exitcode != 0:
+        raise ProviderUnavailable(
+            f"{provider_label} process exited with code {process.exitcode} "
+            "after sending its final result."
+        )
+    try:
+        has_late_message = parent_conn.poll(0.05)
+    except (OSError, ValueError):
+        has_late_message = False
+    if has_late_message:
+        try:
+            parent_conn.recv()
+        except EOFError:
+            pass
+        else:
+            raise ProviderUnavailable(
+                f"{provider_label} sent data after its final result."
+            )
+    return ProviderResult(
+        final_output=str(message.get("final_output", "")),
+        raw=message.get("raw"),
+    )
+
+
+def _close_provider_pipe(connection: Any | None) -> None:
+    """Best-effort close one inherited provider pipe endpoint."""
+
+    if connection is None:
+        return
+    try:
+        connection.close()
+    except BaseException:
+        # Cleanup of the other endpoint and any child must still run.
+        pass
+
+
+def _terminate_provider_process(process: Any | None, *, start_attempted: bool) -> None:
+    """Terminate a child that may have started before ``Process.start`` failed."""
+
+    if process is None or not start_attempted:
+        return
+    try:
+        alive = bool(process.is_alive())
+    except BaseException:
+        # ``start()`` can fail after creating the OS child but before fully
+        # publishing multiprocessing's parent-side state. Treat uncertainty as
+        # live and make a best-effort termination attempt.
+        alive = True
+    if not alive:
+        return
+    try:
+        process.terminate()
+    except BaseException:
+        pass
+    try:
+        process.join(timeout=2)
+    except BaseException:
+        pass
+    try:
+        alive = bool(process.is_alive())
+    except BaseException:
+        alive = True
+    if alive and hasattr(process, "kill"):
+        try:
+            process.kill()
+        except BaseException:
+            pass
+        try:
+            process.join(timeout=2)
+        except BaseException:
+            pass
+
+
 def _run_provider_subprocess(
     *,
     prompt: str,
@@ -1315,59 +1409,81 @@ def _run_provider_subprocess(
     provider_label: str = "OpenAI provider",
     prefer_windowless_python: bool | None = None,
 ) -> ProviderResult:
-    multiprocessing_context = _provider_multiprocessing_context(
-        prefer_windowless_python=prefer_windowless_python
-    )
+    timeout_seconds = _provider_timeout(timeout_seconds)
     reasoning_effort = _provider_reasoning_effort(reasoning_effort)
-    parent_conn, child_conn = multiprocessing_context.Pipe()
-    process = multiprocessing_context.Process(
-        target=child_main or _openai_child_main,
-        args=(
-            child_conn,
-            prompt,
-            context,
-            model,
-            api_key,
-            reasoning_effort,
-            timeout_seconds,
-            max_turns,
-            clear_inherited_modules,
-            base_url,
-        ),
-    )
-    process.daemon = True
-    original_stdin = sys.stdin
-    replacement_stdin = None
+    parent_conn = None
+    child_conn = None
+    process = None
+    start_attempted = False
     try:
-        if not hasattr(sys.stdin, "close"):
-            replacement_stdin = open(os.devnull, "r", encoding="utf-8")
-            sys.stdin = replacement_stdin
-        with _provider_spawn_bootstrap_environment():
-            process.start()
-    finally:
-        sys.stdin = original_stdin
-        if replacement_stdin is not None:
-            replacement_stdin.close()
-    child_conn.close()
-    provider_started_at = time.monotonic()
-    last_provider_activity_at = provider_started_at
-    last_wait_notice_at = 0.0
-    _emit_provider_progress(
-        progress_callback,
-        {
-            "event": "provider_subprocess_started",
-            "provider": provider_label,
-            "pid": process.pid,
-        },
-    )
+        # multiprocessing's executable and the embedded host's ``sys`` fields
+        # are process-global. Keep their selection, mutation, child start, and
+        # restoration in one serialized scope so concurrent provider turns
+        # cannot launch with another turn's transient configuration.
+        with _PROVIDER_PROCESS_LAUNCH_LOCK:
+            previous_executable = multiprocessing.spawn.get_executable()
+            try:
+                multiprocessing_context = _provider_multiprocessing_context(
+                    prefer_windowless_python=prefer_windowless_python
+                )
+                python_executable = _provider_spawn_python_executable(
+                    prefer_windowless=prefer_windowless_python
+                )
+                if not python_executable:
+                    raise ProviderUnavailable(
+                        "VibeCAD cannot start the AI provider process because a "
+                        "packaged Python executable was not found."
+                    )
+                multiprocessing.set_executable(python_executable)
+                parent_conn, child_conn = multiprocessing_context.Pipe()
+                process = multiprocessing_context.Process(
+                    target=child_main or _openai_child_main,
+                    args=(
+                        child_conn,
+                        prompt,
+                        context,
+                        model,
+                        api_key,
+                        reasoning_effort,
+                        timeout_seconds,
+                        max_turns,
+                        clear_inherited_modules,
+                        base_url,
+                    ),
+                )
+                process.daemon = True
+                original_stdin = sys.stdin
+                replacement_stdin = None
+                try:
+                    if not hasattr(sys.stdin, "close"):
+                        replacement_stdin = open(
+                            os.devnull, "r", encoding="utf-8"
+                        )
+                        sys.stdin = replacement_stdin
+                    with _provider_spawn_bootstrap_environment():
+                        start_attempted = True
+                        process.start()
+                finally:
+                    sys.stdin = original_stdin
+                    _close_provider_pipe(replacement_stdin)
+            finally:
+                multiprocessing.set_executable(previous_executable)
 
-    deadline = (
-        time.monotonic() + timeout_seconds
-        if timeout_seconds is not None and timeout_seconds > 0
-        else None
-    )
-    pump_events = event_pump or _process_provider_wait_events
-    try:
+        _close_provider_pipe(child_conn)
+        provider_started_at = time.monotonic()
+        last_provider_activity_at = provider_started_at
+        last_wait_notice_at = 0.0
+        _emit_provider_progress(
+            progress_callback,
+            {
+                "event": "provider_subprocess_started",
+                "provider": provider_label,
+                "pid": process.pid,
+            },
+        )
+
+        deadline = time.monotonic() + timeout_seconds
+        pump_events = event_pump or _process_provider_wait_events
         while True:
             if cancellation_check is not None and cancellation_check():
                 raise ProviderUnavailable("VibeCAD run stopped by user.")
@@ -1384,6 +1500,10 @@ def _run_provider_subprocess(
                     raise ProviderUnavailable(
                         f"{provider_label} process ended before sending a result."
                     ) from exc
+                if not isinstance(message, dict):
+                    raise ProviderUnavailable(
+                        f"{provider_label} sent an invalid process message."
+                    )
                 last_provider_activity_at = time.monotonic()
                 message_type = message.get("type")
                 last_wait_notice_at = 0.0
@@ -1426,13 +1546,12 @@ def _run_provider_subprocess(
                     )
                     continue
                 elif message_type == "done":
-                    process.join(timeout=0.2)
-                    if process.is_alive():
-                        process.terminate()
-                        process.join(timeout=1)
-                    return ProviderResult(
-                        final_output=str(message.get("final_output", "")),
-                        raw=message.get("raw"),
+                    return _provider_result_after_clean_exit(
+                        process,
+                        parent_conn,
+                        message,
+                        provider_label=provider_label,
+                        deadline=deadline,
                     )
                 elif message_type == "progress":
                     event = message.get("event")
@@ -1443,7 +1562,9 @@ def _run_provider_subprocess(
                     error = str(message.get("error", "unknown provider error"))
                     raise ProviderUnavailable(error)
                 else:
-                    continue
+                    raise ProviderUnavailable(
+                        f"{provider_label} sent an unknown process message."
+                    )
             else:
                 pump_events()
                 now = time.monotonic()
@@ -1482,13 +1603,9 @@ def _run_provider_subprocess(
                     f"{provider_label} process exited with code {process.exitcode}."
                 )
     finally:
-        parent_conn.close()
-        if process.is_alive():
-            process.terminate()
-            process.join(timeout=2)
-            if process.is_alive() and hasattr(process, "kill"):
-                process.kill()
-                process.join(timeout=2)
+        _close_provider_pipe(parent_conn)
+        _close_provider_pipe(child_conn)
+        _terminate_provider_process(process, start_attempted=start_attempted)
 
 
 def _process_provider_wait_events() -> None:
@@ -2204,6 +2321,16 @@ def _openai_child_main(
     clear_inherited_modules: bool,
     base_url: str | None = None,
 ) -> None:
+    explicit_api_key = str(api_key or "").strip()
+    if not explicit_api_key:
+        conn.send(
+            {
+                "type": "error",
+                "error": "OpenAI authentication was not supplied by the configured credential store.",
+            }
+        )
+        conn.close()
+        return
     try:
         if clear_inherited_modules:
             _clear_inherited_sdk_modules()
@@ -2259,7 +2386,7 @@ def _openai_child_main(
         return [{"role": "user", "content": content}]
 
     client_kwargs: dict[str, Any] = {
-        "api_key": api_key or os.environ.get("OPENAI_API_KEY") or "vibecad-local",
+        "api_key": explicit_api_key,
         "max_retries": OPENAI_SDK_MAX_RETRIES,
     }
     if base_url:
@@ -3199,6 +3326,16 @@ def _anthropic_child_main(
     clear_inherited_modules: bool,
     base_url: str | None = None,
 ) -> None:
+    explicit_api_key = str(api_key or "").strip()
+    if not explicit_api_key:
+        conn.send(
+            {
+                "type": "error",
+                "error": "Anthropic authentication was not supplied by the configured credential store.",
+            }
+        )
+        conn.close()
+        return
     try:
         if clear_inherited_modules:
             _clear_inherited_sdk_modules()
@@ -3262,9 +3399,10 @@ def _anthropic_child_main(
             }
         ]
 
-        client_kwargs: dict[str, Any] = {"max_retries": 2}
-        if api_key:
-            client_kwargs["api_key"] = api_key
+        client_kwargs: dict[str, Any] = {
+            "api_key": explicit_api_key,
+            "max_retries": 2,
+        }
         if base_url:
             client_kwargs["base_url"] = base_url
         if timeout_seconds is not None and timeout_seconds > 0:

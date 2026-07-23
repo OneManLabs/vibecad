@@ -521,3 +521,37 @@ symbolic-link file access, outside writes, local TCP, and child execution. If
 the sandbox service is absent or cannot start, STEP validation fails closed.
 Linux does not claim this macOS control. Windows keeps STEP attachment disabled
 until it has a secure handle-relative asset store.
+
+## D-069: The near-term macOS deliverable is the developer executable
+
+Date: 2026-07-22. Status: Accepted.
+
+The native Apple Silicon developer executable is the current test target. It
+must pass the same CAD, acceptance, recovery, provider, and stability gates that
+apply to the product. DMG, PKG, Developer ID signing, notarization, Linux, and
+Windows release parity do not block manual macOS developer testing. This
+priority change does not remove those final product requirements.
+
+## D-070: ChatGPT subscription login uses one private pinned runtime
+
+Date: 2026-07-22. Status: Accepted.
+
+VibeCAD uses its bundled, version-pinned Codex app-server for ChatGPT
+subscription sign-in. The runtime owns OAuth login, refresh, and logout.
+VibeCAD does not read or copy the OAuth token. The VibeCAD Codex home is separate
+from other Codex installations. A development override is explicit and is not
+an ambient credential fallback. The macOS developer build must contain the
+pinned runtime before it can offer subscription sign-in.
+
+## D-071: Live scores bind the selected provider runtime by file content
+
+Date: 2026-07-22. Status: Accepted.
+
+The live benchmark runtime identity includes the exact Python selected by the
+provider process, every loaded Python module file, loaded package manifests, and
+loaded non-system native libraries. Discovery starts through the built
+`FreeCADCmd` and the normal provider selection path. The launcher attests before
+and after execution. The scorer reopens and hashes every declared component
+before scoring and before report publication. Large identity data travels in a
+protected file, not in one environment variable. A missing, changed, linked,
+aliased, escaped, or unbounded component makes the evidence invalid.

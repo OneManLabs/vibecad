@@ -21,9 +21,15 @@ def _run_candidate_decision_turn(
     *,
     candidate_decision_callback=None,
     cancellation_check=None,
+    provider_error: BaseException | None = None,
+    capability_error: BaseException | None = None,
+    reject_error: BaseException | None = None,
+    reactivation_error: BaseException | None = None,
+    expected_error: BaseException | None = None,
 ):
     observed: dict[str, object] = {
         "calls": [],
+        "cleanup_order": [],
         "events": [],
         "records": [],
     }
@@ -108,6 +114,7 @@ def _run_candidate_decision_turn(
         @staticmethod
         def prepare(canonical_path, _save_copy):
             assert canonical_path == "/project/design.FCStd"
+            observed["prepared"] = True
             return prepared
 
         @staticmethod
@@ -136,6 +143,7 @@ def _run_candidate_decision_turn(
 
         @staticmethod
         def reject(_prepared, **callbacks):
+            observed["cleanup_order"].append("reject")
             observed["calls"].append(
                 (
                     "reject",
@@ -143,6 +151,8 @@ def _run_candidate_decision_turn(
                     callbacks.get("reason"),
                 )
             )
+            if reject_error is not None:
+                raise reject_error
             return {"ok": True}
 
         @staticmethod
@@ -202,12 +212,42 @@ def _run_candidate_decision_turn(
     monkeypatch.setattr(session, "_consume_context_view_attachment", lambda *_args: None)
     monkeypatch.setattr(session, "make_provider_tool_runner", tool_runner)
     monkeypatch.setattr(session, "_provider_prompt", lambda *_args, **_kwargs: "provider prompt")
+    issue_capability = session._issue_prepared_mutation_capability
+
+    def issue_prepared_mutation_capability(*args, **kwargs):
+        observed["capability_issue_after_prepare"] = bool(observed.get("prepared"))
+        if capability_error is not None:
+            raise capability_error
+        capability = issue_capability(*args, **kwargs)
+        observed["issued_capability"] = capability
+        return capability
+
     monkeypatch.setattr(
         session,
-        "_run_provider",
-        lambda *_args, **_kwargs: SimpleNamespace(final_output="Candidate ready."),
+        "_issue_prepared_mutation_capability",
+        issue_prepared_mutation_capability,
     )
-    monkeypatch.setattr(session, "_reactivate_scope_document", lambda *_args: None)
+
+    def run_provider(*_args, **_kwargs):
+        if provider_error is not None:
+            raise provider_error
+        return SimpleNamespace(final_output="Candidate ready.")
+
+    monkeypatch.setattr(session, "_run_provider", run_provider)
+
+    def reactivate_scope_document(*_args):
+        observed["cleanup_order"].append("reactivate")
+        observed["reactivation_count"] = int(
+            observed.get("reactivation_count", 0)
+        ) + 1
+        if reactivation_error is not None:
+            raise reactivation_error
+
+    monkeypatch.setattr(
+        session,
+        "_reactivate_scope_document",
+        reactivate_scope_document,
+    )
 
     def progress(event):
         observed["events"].append(dict(event))
@@ -229,15 +269,39 @@ def _run_candidate_decision_turn(
             observed["calls"].append("decision")
             return candidate_decision_callback(payload)
 
-    response = session.run_prompt(
-        "Create a part",
-        service=Service(),
-        provider=Provider(),
-        progress_callback=progress,
-        cancellation_check=cancellation_check,
-        candidate_decision_callback=decision_callback,
-        document_thread_dispatch=dispatch,
-    )
+    error_to_expect = expected_error
+    if error_to_expect is None and (
+        capability_error is not None
+        or (
+            provider_error is not None
+            and not isinstance(provider_error, session.ProviderUnavailable)
+        )
+    ):
+        error_to_expect = capability_error or provider_error
+
+    if error_to_expect is None:
+        response = session.run_prompt(
+            "Create a part",
+            service=Service(),
+            provider=Provider(),
+            progress_callback=progress,
+            cancellation_check=cancellation_check,
+            candidate_decision_callback=decision_callback,
+            document_thread_dispatch=dispatch,
+        )
+    else:
+        with pytest.raises(type(error_to_expect), match=str(error_to_expect)) as raised:
+            session.run_prompt(
+                "Create a part",
+                service=Service(),
+                provider=Provider(),
+                progress_callback=progress,
+                cancellation_check=cancellation_check,
+                candidate_decision_callback=decision_callback,
+                document_thread_dispatch=dispatch,
+            )
+        observed["raised_error"] = raised.value
+        response = None
     return observed, response
 
 
@@ -377,6 +441,120 @@ def test_stop_during_review_overrides_accept_and_rejects(monkeypatch) -> None:
         ),
     ]
     assert response.context["candidate_decision"]["decision"] == "reject"
+
+
+def test_unexpected_provider_error_rejects_and_revokes_prepared_candidate(
+    monkeypatch,
+) -> None:
+    observed, response = _run_candidate_decision_turn(
+        monkeypatch,
+        provider_error=RuntimeError("malformed provider process message"),
+    )
+
+    assert response is None
+    assert observed["calls"] == [
+        (
+            "reject",
+            None,
+            "The candidate turn failed before it reached a recorded terminal acceptance state.",
+        )
+    ]
+    assert observed["cleanup_order"] == ["reject", "reactivate"]
+    capability = observed["mutation_capability"]
+    assert not session._prepared_mutation_capability_is_active(
+        capability, capability._service
+    )
+
+
+def test_provider_error_uses_terminal_cleanup_before_returning_failure(
+    monkeypatch,
+) -> None:
+    provider_error = session.ProviderUnavailable("provider transport failed")
+    observed, response = _run_candidate_decision_turn(
+        monkeypatch,
+        provider_error=provider_error,
+    )
+
+    assert response is not None
+    assert response.error == "provider transport failed"
+    assert observed["calls"] == [
+        ("reject", None, "provider transport failed")
+    ]
+    assert observed["cleanup_order"] == ["reject", "reactivate"]
+    capability = observed["mutation_capability"]
+    assert not session._prepared_mutation_capability_is_active(
+        capability, capability._service
+    )
+
+
+def test_capability_issue_failure_is_guarded_by_rollback_and_reactivation(
+    monkeypatch,
+) -> None:
+    capability_error = RuntimeError("capability issue failed")
+    observed, response = _run_candidate_decision_turn(
+        monkeypatch,
+        capability_error=capability_error,
+    )
+
+    assert response is None
+    assert observed["capability_issue_after_prepare"] is True
+    assert "issued_capability" not in observed
+    assert "mutation_capability" not in observed
+    assert observed["calls"] == [
+        (
+            "reject",
+            None,
+            "The candidate turn failed before it reached a recorded terminal acceptance state.",
+        )
+    ]
+    assert observed["cleanup_order"] == ["reject", "reactivate"]
+    assert observed["raised_error"] is capability_error
+
+
+def test_reject_failure_still_reactivates_and_fails_closed(monkeypatch) -> None:
+    provider_error = session.ProviderUnavailable("provider transport failed")
+    reject_error = RuntimeError("prepared rollback failed")
+    observed, response = _run_candidate_decision_turn(
+        monkeypatch,
+        provider_error=provider_error,
+        reject_error=reject_error,
+        expected_error=reject_error,
+    )
+
+    assert response is None
+    assert observed["calls"] == [
+        ("reject", None, "provider transport failed")
+    ]
+    assert observed["cleanup_order"] == ["reject", "reactivate"]
+    assert observed["raised_error"] is reject_error
+    assert observed["raised_error"].__cause__ is provider_error
+    capability = observed["mutation_capability"]
+    assert not session._prepared_mutation_capability_is_active(
+        capability, capability._service
+    )
+
+
+def test_reactivation_failure_after_rollback_fails_closed(monkeypatch) -> None:
+    provider_error = session.ProviderUnavailable("provider transport failed")
+    reactivation_error = RuntimeError("document reactivation failed")
+    observed, response = _run_candidate_decision_turn(
+        monkeypatch,
+        provider_error=provider_error,
+        reactivation_error=reactivation_error,
+        expected_error=reactivation_error,
+    )
+
+    assert response is None
+    assert observed["calls"] == [
+        ("reject", None, "provider transport failed")
+    ]
+    assert observed["cleanup_order"] == ["reject", "reactivate"]
+    assert observed["raised_error"] is reactivation_error
+    assert observed["raised_error"].__cause__ is provider_error
+    capability = observed["mutation_capability"]
+    assert not session._prepared_mutation_capability_is_active(
+        capability, capability._service
+    )
 
 
 def test_sketch_close_continuation_forwards_candidate_decision_callback(monkeypatch) -> None:

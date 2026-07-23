@@ -8,12 +8,34 @@ import argparse
 import hashlib
 import hmac
 import json
-import os
 from pathlib import Path
 import secrets
 import subprocess
 from typing import Any, Callable
 from urllib.parse import SplitResult, urlsplit, urlunsplit
+
+try:
+    from tools.vibecad_secure_process import (
+        minimal_child_environment,
+        run_bounded_process,
+        validate_finite_timeout,
+    )
+except ModuleNotFoundError:  # Direct execution from the tools directory.
+    from vibecad_secure_process import (  # type: ignore[no-redef]
+        minimal_child_environment,
+        run_bounded_process,
+        validate_finite_timeout,
+    )
+try:
+    from tools.vibecad_benchmark_evidence_io import (
+        EvidenceIOError,
+        load_bounded_json,
+    )
+except ModuleNotFoundError:  # Direct execution from the tools directory.
+    from vibecad_benchmark_evidence_io import (  # type: ignore[no-redef]
+        EvidenceIOError,
+        load_bounded_json,
+    )
 
 
 READINESS_SCHEMA = "vibecad-provider-readiness-v1"
@@ -239,8 +261,18 @@ def run_probe(
     validate_credentials: bool = False,
     credential_validation_timeout: float = 5.0,
     credential_binding_nonce: str | None = None,
-    runner: Callable[..., Any] = subprocess.run,
+    runner: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
+    timeout_seconds = validate_finite_timeout(
+        timeout_seconds,
+        label="The readiness timeout",
+        maximum=60,
+    )
+    credential_validation_timeout = validate_finite_timeout(
+        credential_validation_timeout,
+        label="The credential check timeout",
+        maximum=15,
+    )
     binding_nonce = _lower_hex(
         credential_binding_nonce or secrets.token_hex(32),
         64,
@@ -250,20 +282,24 @@ def run_probe(
     timed_out = False
     return_code = None
     try:
-        environment = dict(os.environ)
-        environment["VIBECAD_PROVIDER_READINESS_OUTPUT"] = str(output.resolve())
-        environment["VIBECAD_PROVIDER_VALIDATE_CREDENTIALS"] = (
-            "1" if validate_credentials else "0"
+        environment = minimal_child_environment(
+            {
+                "VIBECAD_PROVIDER_READINESS_OUTPUT": str(output.resolve()),
+                "VIBECAD_PROVIDER_VALIDATE_CREDENTIALS": (
+                    "1" if validate_credentials else "0"
+                ),
+                "VIBECAD_PROVIDER_VALIDATION_TIMEOUT": str(
+                    credential_validation_timeout
+                ),
+                "VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE": binding_nonce,
+            }
         )
-        environment["VIBECAD_PROVIDER_VALIDATION_TIMEOUT"] = str(
-            credential_validation_timeout
-        )
-        environment["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"] = binding_nonce
         expression = (
             "import runpy; "
             f"runpy.run_path({str(child)!r}, run_name='__main__')"
         )
-        completed = runner(
+        process_runner = runner or run_bounded_process
+        completed = process_runner(
             [str(freecad), "-c", expression], env=environment,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, timeout=timeout_seconds, check=False,
@@ -271,8 +307,28 @@ def run_probe(
         return_code = completed.returncode
     except subprocess.TimeoutExpired:
         timed_out = True
-    if output.is_file():
-        result = json.loads(output.read_text(encoding="utf-8"))
+    if output.exists():
+        try:
+            snapshot, result = load_bounded_json(
+                output,
+                max_bytes=256 * 1024,
+                label="provider readiness result",
+            )
+            with snapshot:
+                snapshot.verify_unchanged()
+            if not isinstance(result, dict):
+                raise EvidenceIOError(
+                    "The provider readiness result must be a JSON object."
+                )
+        except (EvidenceIOError, UnicodeError, ValueError) as exc:
+            result = {
+                "schema": "vibecad-provider-readiness-v1",
+                "version": 1,
+                "can_call_provider": False,
+                "prompt_sent": False,
+                "document_data_sent": False,
+                "error": f"Provider readiness evidence was rejected: {exc}",
+            }
     else:
         result = {
             "schema": "vibecad-provider-readiness-v1", "version": 1,

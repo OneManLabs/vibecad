@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import secrets
 import sys
 import time
 from typing import Any
@@ -28,8 +30,15 @@ from VibeCADLiveBenchmark import (
     LIVE_CASE_TOTAL_TIMEOUT_SECONDS,
     LIVE_EXECUTOR,
     LIVE_LIMITS,
+    LIVE_MAX_PROGRESS_EVENT_BYTES,
+    LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES,
+    LIVE_MAX_PROGRESS_INTEGRITY_ERRORS,
+    LIVE_MAX_QUESTIONS_PER_CASE,
+    LIVE_MAX_RETAINED_PROGRESS_EVENTS,
     LIVE_MAX_OUTPUT_TOKENS_PER_REQUEST,
     LIVE_MAX_REQUEST_BYTES,
+    LIVE_PARTIAL_METRICS_SCHEMA,
+    LIVE_PARTIAL_METRICS_VERSION,
     LIVE_PROVIDER_TIMEOUT_SECONDS,
     LIVE_PROVIDER_TURNS_PER_CASE,
     LIVE_RUN_SCHEMA,
@@ -44,17 +53,21 @@ from VibeCADLiveBenchmark import (
     all_edge_fillet_evidence,
     centered_hole_evidence,
     changed_constraint_evidence,
+    empty_partial_case_metrics,
     exact_volume_evidence,
+    live_run_unscorable_reasons,
     mirrored_link_evidence,
     open_top_aperture_evidence,
     persist_partial_metrics_checkpoint,
     readiness_digest,
+    runtime_identity_digest,
     recover_partial_case_metrics,
     require_complete_partial_usage,
     sha256_file,
     stl_export_evidence,
     symmetric_through_holes_evidence,
     validate_live_readiness,
+    validate_partial_metrics_checkpoint,
     validate_runtime_identity,
     validate_unrated_live_run,
     visible_solid_target_evidence,
@@ -63,6 +76,7 @@ from VibeCADProvider import OPENAI_SDK_MAX_RETRIES, OfflineProvider, OpenAIProvi
 from VibeCADSession import choose_provider, run_prompt
 from VibeCADDocumentValidator import validate_saved_document
 from tools.probe_provider_readiness import readiness_execution_identity_matches
+from tools.vibecad_benchmark_evidence_io import load_bounded_json
 
 
 MAX_PROVIDER_TURNS = LIVE_PROVIDER_TURNS_PER_CASE
@@ -94,6 +108,12 @@ class Measurements:
         self.api_request_count = 0
         self.provider_turns: set[int] = set()
         self.usage_event_count = 0
+        self.retained_event_bytes = 0
+        self.dropped_event_count = 0
+        self.usage_integrity_errors: list[str] = []
+        self._request_turns: set[int] = set()
+        self._usage_turns: set[int] = set()
+        self._usage_mode: str | None = None
         self._incremental_usage = {name: 0 for name in (
             "input_tokens", "output_tokens", "cached_input_tokens",
             "reasoning_tokens", "total_tokens",
@@ -101,72 +121,205 @@ class Measurements:
         self._cumulative_usage = dict(self._incremental_usage)
         self.limit_error: str | None = None
 
-    def progress(self, event: dict[str, Any]) -> None:
-        item = json.loads(json.dumps(event, default=str))
+    def _fail(self, message: str, *, usage_integrity: bool = False) -> None:
+        if self.limit_error is None:
+            self.limit_error = message[:512]
+        if (
+            usage_integrity
+            and message not in self.usage_integrity_errors
+            and len(self.usage_integrity_errors)
+            < LIVE_MAX_PROGRESS_INTEGRITY_ERRORS
+        ):
+            self.usage_integrity_errors.append(message[:512])
+
+    def _retain_event(self, event: dict[str, Any]) -> None:
+        name = str(event.get("event") or "invalid_progress_event")
+        try:
+            item = json.loads(
+                json.dumps(
+                    event,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                    allow_nan=False,
+                )
+            )
+        except (TypeError, ValueError):
+            item = {"event": name, "invalid_json": True}
+            self.dropped_event_count += 1
+            self._fail("A provider progress event was not finite JSON.")
+        if name in {"provider_text_delta", "provider_reasoning_delta"}:
+            text = str(event.get("text") or event.get("delta") or "")
+            item.pop("text", None)
+            item.pop("delta", None)
+            item["text_length"] = len(text)
+            item["text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        encoded = json.dumps(
+            item,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        if len(encoded) > LIVE_MAX_PROGRESS_EVENT_BYTES:
+            item = {
+                "event": name,
+                "oversized_event_bytes": len(encoded),
+                "oversized_event_sha256": hashlib.sha256(encoded).hexdigest(),
+            }
+            encoded = json.dumps(
+                item, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            self.dropped_event_count += 1
+            self._fail("A provider progress event exceeded its byte limit.")
+        if len(self.events) >= LIVE_MAX_RETAINED_PROGRESS_EVENTS:
+            self.dropped_event_count += 1
+            self._fail("The provider exceeded the retained progress-event limit.")
+            return
+        if (
+            self.retained_event_bytes + len(encoded)
+            > LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES
+        ):
+            self.dropped_event_count += 1
+            self._fail("The provider exceeded the progress-event byte limit.")
+            return
         self.events.append(item)
+        self.retained_event_bytes += len(encoded)
+
+    def _record_request(self, turn: Any, item: dict[str, Any]) -> None:
+        if (
+            isinstance(turn, bool)
+            or not isinstance(turn, int)
+            or turn <= 0
+            or turn != len(self._request_turns) + 1
+            or turn in self._request_turns
+        ):
+            self._fail(
+                "Provider request turns are duplicate, missing, or reordered.",
+                usage_integrity=True,
+            )
+            return
+        if len(self._request_turns) >= MAX_PROVIDER_TURNS:
+            self._fail("The provider exceeded the API-request limit.")
+            return
+        self._request_turns.add(turn)
+        self.provider_turns.add(turn)
+        self.api_request_count = len(self._request_turns)
+        if (
+            item.get("sdk_max_retries") != LIVE_SDK_RETRIES_PER_REQUEST
+            or item.get("api_attempt_ceiling")
+            != 1 + LIVE_SDK_RETRIES_PER_REQUEST
+        ):
+            self._fail("The provider request retry contract changed.")
+
+    def _record_usage(self, turn: Any, item: dict[str, Any]) -> None:
+        mode = item.get("mode")
+        if mode not in {"incremental", "cumulative"}:
+            self._fail("The provider usage mode is invalid.", usage_integrity=True)
+            return
+        if self._usage_mode is not None and mode != self._usage_mode:
+            self._fail(
+                "The provider mixed incremental and cumulative usage modes.",
+                usage_integrity=True,
+            )
+            return
+        if (
+            isinstance(turn, bool)
+            or not isinstance(turn, int)
+            or turn not in self._request_turns
+            or turn in self._usage_turns
+        ):
+            self._fail(
+                "Provider usage is not bound to one unique request turn.",
+                usage_integrity=True,
+            )
+            return
+        if (
+            item.get("usage_available") is not True
+            or item.get("usage_complete") is not True
+        ):
+            self._fail(
+                "The provider returned incomplete token usage for a bounded request.",
+                usage_integrity=True,
+            )
+            return
+        usage = item.get("usage")
+        if not isinstance(usage, dict):
+            self._fail("The provider usage payload is invalid.", usage_integrity=True)
+            return
+        observed: dict[str, int] = {}
+        for field in self._incremental_usage:
+            value = usage.get(field)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+            ):
+                self._fail(
+                    "The provider usage payload has an invalid count.",
+                    usage_integrity=True,
+                )
+                return
+            observed[field] = value
+        if observed["total_tokens"] < (
+            observed["input_tokens"] + observed["output_tokens"]
+        ):
+            self._fail(
+                "The provider usage payload has an inconsistent total.",
+                usage_integrity=True,
+            )
+            return
+        if mode == "cumulative" and any(
+            observed[field] < self._cumulative_usage[field]
+            for field in observed
+        ):
+            self._fail(
+                "The provider cumulative usage decreased.",
+                usage_integrity=True,
+            )
+            return
+        self._usage_mode = mode
+        self._usage_turns.add(turn)
+        if mode == "cumulative":
+            self._cumulative_usage.update(observed)
+        else:
+            for field, value in observed.items():
+                self._incremental_usage[field] += value
+        self.usage_event_count = len(self._usage_turns)
+        if self.usage()["total_tokens"] > MAX_TOTAL_TOKENS_PER_CASE:
+            self._fail("The provider exceeded the per-case token limit.")
+
+    def progress(self, event: dict[str, Any]) -> None:
+        item = dict(event) if isinstance(event, dict) else {}
+        self._retain_event(item)
         name = str(item.get("event") or "")
         turn = item.get("turn")
-        if isinstance(turn, int) and not isinstance(turn, bool) and turn > 0:
-            self.provider_turns.add(turn)
-            if max(self.provider_turns) > MAX_PROVIDER_TURNS:
-                self.limit_error = "The provider exceeded the provider-turn limit."
         if name == "provider_tool_requested":
-            self.tool_count += 1
+            self.tool_count = min(self.tool_count + 1, MAX_TOOL_CALLS + 1)
             if self.tool_count > MAX_TOOL_CALLS:
-                self.limit_error = "The provider exceeded the CAD tool-call limit."
+                self._fail("The provider exceeded the CAD tool-call limit.")
         if name == "provider_request_started":
-            self.api_request_count += 1
-            if (
-                item.get("sdk_max_retries") != LIVE_SDK_RETRIES_PER_REQUEST
-                or item.get("api_attempt_ceiling")
-                != 1 + LIVE_SDK_RETRIES_PER_REQUEST
-            ):
-                self.limit_error = "The provider request retry contract changed."
-            if self.api_request_count > MAX_PROVIDER_TURNS:
-                self.limit_error = "The provider exceeded the API-request limit."
+            self._record_request(turn, item)
         if name.endswith("retrying") or (
             name == "provider_tool_result_sent" and item.get("ok") is False
         ):
-            self.retry_count += 1
+            self.retry_count = min(self.retry_count + 1, MAX_RETRY_EVENTS + 1)
             if self.retry_count > MAX_RETRY_EVENTS:
-                self.limit_error = "The provider exceeded the visible retry limit."
+                self._fail("The provider exceeded the visible retry limit.")
         if name == "provider_usage":
-            usage = item.get("usage")
-            mode = str(item.get("mode") or "")
-            if (
-                item.get("usage_available") is not True
-                or item.get("usage_complete") is not True
-            ):
-                self.limit_error = (
-                    "The provider returned incomplete token usage for a bounded request."
-                )
-            elif isinstance(usage, dict):
-                target = (
-                    self._cumulative_usage
-                    if mode == "cumulative"
-                    else self._incremental_usage
-                )
-                for field in target:
-                    value = usage.get(field)
-                    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                        if mode == "cumulative":
-                            target[field] = value
-                        else:
-                            target[field] += value
-                self.usage_event_count += 1
-                observed_total = max(
-                    self._incremental_usage["total_tokens"],
-                    self._cumulative_usage["total_tokens"],
-                )
-                if observed_total > MAX_TOTAL_TOKENS_PER_CASE:
-                    self.limit_error = "The provider exceeded the per-case token limit."
+            self._record_usage(turn, item)
 
     def questions(self, questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         count = len(questions)
-        self.question_count += count
+        self.question_count = min(
+            self.question_count + count, LIVE_MAX_QUESTIONS_PER_CASE
+        )
         # Each Tier 1 case supplies all critical dimensions. A question is
         # unnecessary for this fixed benchmark and ends the case safely.
-        self.unnecessary_question_count += count
+        self.unnecessary_question_count = self.question_count
+        if count and self.question_count >= LIVE_MAX_QUESTIONS_PER_CASE:
+            self._fail("The provider exceeded the question-count limit.")
         return []
 
     def cancelled(self) -> bool:
@@ -176,9 +329,9 @@ class Measurements:
 
     def usage(self) -> dict[str, Any]:
         source = (
-            self._incremental_usage
-            if self.usage_event_count and any(self._incremental_usage.values())
-            else self._cumulative_usage
+            self._cumulative_usage
+            if self._usage_mode == "cumulative"
+            else self._incremental_usage
         )
         return normalized_usage(
             input_tokens=source["input_tokens"],
@@ -191,9 +344,13 @@ class Measurements:
     def snapshot(self) -> dict[str, Any]:
         """Return recoverable partial metrics after any later case failure."""
 
+        missing_usage_turns = sorted(self._request_turns - self._usage_turns)
         return {
             "elapsed_seconds": max(0.0, time.monotonic() - self.started),
             "events": list(self.events),
+            "retained_event_bytes": self.retained_event_bytes,
+            "dropped_event_count": self.dropped_event_count,
+            "event_evidence_complete": self.dropped_event_count == 0,
             "question_count": self.question_count,
             "unnecessary_question_count": self.unnecessary_question_count,
             "retry_count": self.retry_count,
@@ -201,6 +358,12 @@ class Measurements:
             "api_request_count": self.api_request_count,
             "provider_turns_observed": sorted(self.provider_turns),
             "usage_event_count": self.usage_event_count,
+            "usage_mode": self._usage_mode,
+            "usage_complete": (
+                not missing_usage_turns and not self.usage_integrity_errors
+            ),
+            "missing_usage_turns": missing_usage_turns,
+            "usage_integrity_errors": list(self.usage_integrity_errors),
             "usage": self.usage(),
             "limit_error": self.limit_error,
         }
@@ -756,6 +919,9 @@ def _failed_case_attempt(
     output: Path,
     readiness: dict[str, Any],
     source_commit: str,
+    readiness_sha256: str,
+    runtime_identity_sha256: str,
+    run_nonce: str,
     error: str,
     in_memory_partial: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -768,18 +934,49 @@ def _failed_case_attempt(
     partial: dict[str, Any] = (
         dict(in_memory_partial) if isinstance(in_memory_partial, dict) else {}
     )
-    if not partial and partial_path.is_file():
+    if (
+        not partial
+        and partial_path.is_file()
+        and not partial_path.is_symlink()
+        and partial_path.stat().st_size <= LIMITS["max_partial_checkpoint_bytes"]
+    ):
         try:
             loaded = json.loads(partial_path.read_text(encoding="utf-8"))
             if (
                 isinstance(loaded, dict)
-                and loaded.get("schema") == "vibecad-live-partial-metrics-v1"
+                and loaded.get("schema") == LIVE_PARTIAL_METRICS_SCHEMA
             ):
                 partial = loaded
         except Exception:
             partial = {}
-    metrics = recover_partial_case_metrics(partial, now_epoch=time.time())
-    require_complete_partial_usage(metrics)
+    partial_error: str | None = None
+    partial_valid = False
+    try:
+        metrics = recover_partial_case_metrics(
+            partial,
+            now_epoch=time.time(),
+            expected_case_id=case_id,
+            expected_source_commit=source_commit,
+            expected_readiness_sha256=readiness_sha256,
+            expected_runtime_identity_sha256=runtime_identity_sha256,
+            expected_run_nonce=run_nonce,
+        )
+        partial_valid = bool(partial)
+        if partial_valid:
+            try:
+                atomic_write_json(partial_path, partial)
+            except Exception as exc:
+                partial_valid = False
+                partial_error = (
+                    f"Partial checkpoint persistence failed: {type(exc).__name__}: {exc}"
+                )
+    except Exception as exc:
+        metrics = empty_partial_case_metrics()
+        partial_error = (
+            f"Partial checkpoint validation failed: {type(exc).__name__}: {exc}"
+        )
+    if partial_error:
+        error = f"{error}; {partial_error}"
     elapsed = metrics["elapsed_seconds"]
     usage = metrics["usage"]
     turns = metrics["provider_turns_observed"]
@@ -887,6 +1084,16 @@ def _failed_case_attempt(
         "tool_call_count": int(metrics.get("tool_call_count", 0) or 0),
         "retry_count": int(metrics.get("retry_count", 0) or 0),
         "usage_event_count": int(metrics.get("usage_event_count", 0) or 0),
+        "usage_mode": metrics.get("usage_mode"),
+        "usage_complete": metrics.get("usage_complete") is True,
+        "missing_usage_turns": list(metrics.get("missing_usage_turns") or []),
+        "usage_integrity_error_count": len(
+            list(metrics.get("usage_integrity_errors") or [])
+        ),
+        "event_evidence_complete": (
+            metrics.get("event_evidence_complete") is True
+        ),
+        "partial_evidence_valid": partial_valid,
         "fixture": fixture,
         "final_sha256": final_sha,
         "isolated_validation_ok": False,
@@ -901,6 +1108,9 @@ def _run_case(
     output: Path,
     readiness: dict[str, Any],
     source_commit: str,
+    readiness_sha256: str,
+    runtime_identity_sha256: str,
+    run_nonce: str,
     failure_state: dict[str, Any],
 ) -> dict[str, Any]:
     case_id = str(case["id"])
@@ -911,14 +1121,7 @@ def _run_case(
     partial_path = case_dir / "partial-metrics.json"
     measurements = Measurements()
     started_epoch = time.time()
-    failure_state["partial"] = {
-        "schema": "vibecad-live-partial-metrics-v1",
-        "version": 1,
-        "case_id": case_id,
-        "started_at_epoch": started_epoch,
-        "provider_class": "",
-        "measurements": measurements.snapshot(),
-    }
+    checkpoint_sequence = 0
     _close_all()
     Gui.activateWorkbench("PartDesignWorkbench")
     document = App.newDocument(f"Live_{case_id}")
@@ -932,19 +1135,37 @@ def _run_case(
         "object_names": [],
         "canonical_sha256": sha256_file(document_path),
     }
-    def checkpoint() -> None:
+    def checkpoint(*, force: bool = False) -> None:
+        nonlocal checkpoint_sequence
+        checkpoint_sequence += 1
+        payload = {
+            "schema": LIVE_PARTIAL_METRICS_SCHEMA,
+            "version": LIVE_PARTIAL_METRICS_VERSION,
+            "case_id": case_id,
+            "source_commit": source_commit,
+            "readiness_sha256": readiness_sha256,
+            "runtime_identity_sha256": runtime_identity_sha256,
+            "run_nonce": run_nonce,
+            "started_at_epoch": started_epoch,
+            "updated_at_epoch": time.time(),
+            "checkpoint_sequence": checkpoint_sequence,
+            "provider_class": provider_class,
+            "fixture": fixture,
+            "measurements": measurements.snapshot(),
+        }
+        validate_partial_metrics_checkpoint(
+            payload,
+            expected_case_id=case_id,
+            expected_source_commit=source_commit,
+            expected_readiness_sha256=readiness_sha256,
+            expected_runtime_identity_sha256=runtime_identity_sha256,
+            expected_run_nonce=run_nonce,
+        )
         persist_partial_metrics_checkpoint(
             failure_state,
-            {
-                "schema": "vibecad-live-partial-metrics-v1",
-                "version": 1,
-                "case_id": case_id,
-                "started_at_epoch": started_epoch,
-                "provider_class": provider_class,
-                "fixture": fixture,
-                "measurements": measurements.snapshot(),
-            },
+            payload,
             partial_path,
+            force=force,
         )
 
     def progress(event: dict[str, Any]) -> None:
@@ -956,13 +1177,13 @@ def _run_case(
         checkpoint()
         return result
 
-    checkpoint()
+    checkpoint(force=True)
     try:
         fixture = _prepare_case(case_id, service)
-        checkpoint()
+        checkpoint(force=True)
         selected = _selected_provider(service, readiness)
         provider_class = selected.__class__.__name__
-        checkpoint()
+        checkpoint(force=True)
         response = run_prompt(
             str(case["prompt"]),
             service=service,
@@ -976,10 +1197,10 @@ def _run_case(
         if execution_error is None:
             App.ActiveDocument.recompute()
             App.ActiveDocument.save()
-        checkpoint()
+        checkpoint(force=True)
     except Exception as exc:
         execution_error = f"{type(exc).__name__}: {exc}"
-        checkpoint()
+        checkpoint(force=True)
     trace = list(response.tool_trace) if response is not None else []
     exported = _export_path(trace)
     _close_all()
@@ -1013,7 +1234,7 @@ def _run_case(
         except Exception as exc:
             isolated_validation = {"ok": False, "errors": [str(exc)]}
             execution_error = execution_error or f"Isolated validation failed: {exc}"
-    checkpoint()
+    checkpoint(force=True)
     if time.monotonic() - measurements.started > CASE_TOTAL_TIMEOUT_SECONDS:
         raise TimeoutError("The case total-time limit expired before the final reopen.")
     try:
@@ -1024,7 +1245,7 @@ def _run_case(
     elapsed = time.monotonic() - measurements.started
     if elapsed > CASE_TOTAL_TIMEOUT_SECONDS:
         execution_error = execution_error or "The case exceeded the total-time limit."
-    checkpoint()
+    checkpoint(force=True)
     final_sha256 = sha256_file(document_path)
     try:
         usage = measurements.usage()
@@ -1035,7 +1256,15 @@ def _run_case(
     except Exception as exc:
         execution_error = execution_error or f"Usage evidence failed: {exc}"
         usage = normalized_usage()
-    require_complete_partial_usage(measurements.snapshot())
+    final_metrics = measurements.snapshot()
+    if final_metrics["usage_complete"] is not True:
+        execution_error = execution_error or (
+            "The provider request has incomplete or invalid usage evidence."
+        )
+    if final_metrics["event_evidence_complete"] is not True:
+        execution_error = execution_error or (
+            "The retained provider progress evidence is incomplete."
+        )
     stages = _case_validation(
         case_id,
         reopened_document,
@@ -1058,6 +1287,14 @@ def _run_case(
         "tool_call_count": measurements.tool_count,
         "retry_count": measurements.retry_count,
         "usage_event_count": measurements.usage_event_count,
+        "usage_mode": final_metrics["usage_mode"],
+        "usage_complete": final_metrics["usage_complete"],
+        "missing_usage_turns": final_metrics["missing_usage_turns"],
+        "usage_integrity_error_count": len(
+            final_metrics["usage_integrity_errors"]
+        ),
+        "event_evidence_complete": final_metrics["event_evidence_complete"],
+        "partial_evidence_valid": True,
         "fixture": fixture,
         "final_sha256": final_sha256,
         "isolated_validation_ok": isolated_validation.get("ok") is True,
@@ -1133,38 +1370,46 @@ def _run_case(
 
 def main() -> int:
     output_value = str(os.environ.get("VIBECAD_LIVE_BENCHMARK_OUTPUT") or "").strip()
-    readiness_value = str(os.environ.get("VIBECAD_LIVE_BENCHMARK_READINESS") or "").strip()
+    readiness_value = str(
+        os.environ.get("VIBECAD_LIVE_BENCHMARK_READINESS_JSON") or ""
+    ).strip()
     source_commit = str(
         os.environ.get("VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT") or ""
     ).strip()
     if not output_value or not readiness_value or not source_commit:
         raise RuntimeError("The live benchmark environment is incomplete.")
     output = Path(output_value).resolve()
-    readiness_path = Path(readiness_value).resolve()
-    readiness = validate_live_readiness(
-        json.loads(readiness_path.read_text(encoding="utf-8"))
-    )
+    readiness = validate_live_readiness(json.loads(readiness_value))
     expected_digest = str(
         os.environ.get("VIBECAD_LIVE_BENCHMARK_READINESS_SHA256") or ""
     )
-    runtime_identity_digest = str(
+    expected_runtime_digest = str(
         os.environ.get("VIBECAD_LIVE_BENCHMARK_RUNTIME_SHA256") or ""
     )
     runtime_identity_value = str(
-        os.environ.get("VIBECAD_LIVE_BENCHMARK_RUNTIME_IDENTITY") or ""
+        os.environ.get("VIBECAD_LIVE_BENCHMARK_RUNTIME_PATH") or ""
     ).strip()
     if not runtime_identity_value:
-        raise RuntimeError("The installed runtime identity path is missing.")
-    runtime_identity_path = Path(runtime_identity_value).resolve()
-    if (
-        not runtime_identity_path.is_file()
-        or sha256_file(runtime_identity_path) != runtime_identity_digest
-    ):
-        raise RuntimeError("The installed runtime identity changed before execution.")
-    validate_runtime_identity(
-        json.loads(runtime_identity_path.read_text(encoding="utf-8")),
-        source_commit=source_commit,
+        raise RuntimeError("The installed runtime identity is missing.")
+    runtime_path = Path(runtime_identity_value)
+    if runtime_path != output / "runtime-identity.json":
+        raise RuntimeError("The installed runtime identity path is invalid.")
+    runtime_snapshot, runtime_identity = load_bounded_json(
+        runtime_path,
+        max_bytes=4 * 1024 * 1024,
+        label="live runtime identity",
+        require_single_link=True,
     )
+    with runtime_snapshot:
+        if runtime_identity_digest(runtime_identity) != expected_runtime_digest:
+            raise RuntimeError(
+                "The installed runtime identity changed before execution."
+            )
+        validate_runtime_identity(
+            runtime_identity,
+            source_commit=source_commit,
+        )
+        runtime_snapshot.verify_unchanged()
     if readiness_digest(readiness) != expected_digest:
         raise RuntimeError("The provider readiness evidence changed before execution.")
     if (
@@ -1179,13 +1424,21 @@ def main() -> int:
     if tuple(case.get("id") for case in cases) != TIER1_CASE_IDS:
         raise RuntimeError("The Tier 1 live case set is incomplete or reordered.")
 
+    run_nonce = secrets.token_hex(32)
     attempts = []
     case_runtime = []
     for case in cases:
         failure_state: dict[str, Any] = {}
         try:
             record, runtime = _run_case(
-                case, output, readiness, source_commit, failure_state
+                case,
+                output,
+                readiness,
+                source_commit,
+                expected_digest,
+                expected_runtime_digest,
+                run_nonce,
+                failure_state,
             )
         except Exception as exc:
             record, runtime = _failed_case_attempt(
@@ -1193,6 +1446,9 @@ def main() -> int:
                 output,
                 readiness,
                 source_commit,
+                expected_digest,
+                expected_runtime_digest,
+                run_nonce,
                 f"{type(exc).__name__}: {exc}",
                 in_memory_partial=failure_state.get("partial"),
             )
@@ -1206,6 +1462,7 @@ def main() -> int:
         field: sum(item["normalized_usage"][field] for item in attempts)
         for field in usage_fields
     }
+    unscorable_reasons = live_run_unscorable_reasons(case_runtime)
     report = {
         "schema": LIVE_RUN_SCHEMA,
         "version": LIVE_RUN_VERSION,
@@ -1216,14 +1473,17 @@ def main() -> int:
         "executor": LIVE_EXECUTOR,
         "source_commit": source_commit,
         "readiness_sha256": expected_digest,
-        "runtime_identity_sha256": runtime_identity_digest,
+        "runtime_identity_sha256": expected_runtime_digest,
+        "run_nonce": run_nonce,
         "limits": LIMITS,
         "usage_summary": usage_summary,
         "case_runtime": case_runtime,
+        "scorable": not unscorable_reasons,
+        "unscorable_reasons": unscorable_reasons,
         "scored": False,
         "case_attempts": attempts,
     }
-    validate_unrated_live_run(report)
+    validate_unrated_live_run(report, require_scorable=False)
     atomic_write_json(output / "tier1-live-unrated-run.json", report)
     return 0 if all(item["passed"] for item in attempts) else 1
 

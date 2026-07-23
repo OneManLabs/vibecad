@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import tempfile
@@ -16,10 +17,24 @@ from VibeCADBenchmark import BenchmarkEvidenceError, validate_case_attempt
 
 
 LIVE_RUN_SCHEMA = "vibecad-live-benchmark-run-v1"
-LIVE_RUN_VERSION = 1
+LIVE_RUN_VERSION = 2
 LIVE_EXECUTOR = "vibecad-normal-session-live-v1"
-LIVE_RUNTIME_IDENTITY_SCHEMA = "vibecad-live-runtime-identity-v1"
-LIVE_RUNTIME_IDENTITY_VERSION = 1
+LIVE_PARTIAL_METRICS_SCHEMA = "vibecad-live-partial-metrics-v2"
+LIVE_PARTIAL_METRICS_VERSION = 2
+LIVE_RUNTIME_IDENTITY_SCHEMA = "vibecad-live-runtime-identity-v3"
+LIVE_RUNTIME_IDENTITY_VERSION = 3
+LIVE_RUNTIME_FILE_ROLES = (
+    "benchmark_evidence_io_helper",
+    "benchmark_launcher",
+    "freecad_app_library",
+    "freecad_cmd",
+    "freecad_gui",
+    "freecad_gui_library",
+    "provider_runtime_attestation",
+    "readiness_child",
+    "readiness_probe",
+    "secure_process_helper",
+)
 LIVE_SUPPORTED_PROVIDERS = ("openai",)
 LIVE_SESSION_CALLS = 7
 LIVE_PROVIDER_TURNS_PER_CASE = 12
@@ -31,6 +46,13 @@ LIVE_SDK_RETRIES_PER_REQUEST = 2
 LIVE_MAX_REQUEST_BYTES = 150_000
 LIVE_MAX_OUTPUT_TOKENS_PER_REQUEST = 20_000
 LIVE_TOTAL_TOKENS_PER_CASE = 200_000
+LIVE_MAX_RETAINED_PROGRESS_EVENTS = 512
+LIVE_MAX_PROGRESS_EVENT_BYTES = 8_192
+LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES = 262_144
+LIVE_MAX_PROGRESS_INTEGRITY_ERRORS = 16
+LIVE_MAX_QUESTIONS_PER_CASE = 32
+LIVE_PARTIAL_CHECKPOINT_INTERVAL_SECONDS = 0.25
+LIVE_MAX_PARTIAL_CHECKPOINT_BYTES = 1_048_576
 LIVE_WORST_CASE_API_ATTEMPTS = (
     LIVE_SESSION_CALLS
     * LIVE_PROVIDER_TURNS_PER_CASE
@@ -49,6 +71,15 @@ LIVE_LIMITS = MappingProxyType(
         "max_request_bytes": LIVE_MAX_REQUEST_BYTES,
         "max_output_tokens_per_request": LIVE_MAX_OUTPUT_TOKENS_PER_REQUEST,
         "total_tokens_per_case": LIVE_TOTAL_TOKENS_PER_CASE,
+        "max_retained_progress_events": LIVE_MAX_RETAINED_PROGRESS_EVENTS,
+        "max_progress_event_bytes": LIVE_MAX_PROGRESS_EVENT_BYTES,
+        "max_progress_events_total_bytes": LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES,
+        "max_progress_integrity_errors": LIVE_MAX_PROGRESS_INTEGRITY_ERRORS,
+        "max_questions_per_case": LIVE_MAX_QUESTIONS_PER_CASE,
+        "partial_checkpoint_interval_seconds": (
+            LIVE_PARTIAL_CHECKPOINT_INTERVAL_SECONDS
+        ),
+        "max_partial_checkpoint_bytes": LIVE_MAX_PARTIAL_CHECKPOINT_BYTES,
     }
 )
 TIER1_CASE_IDS = (
@@ -617,6 +648,7 @@ def validate_live_readiness(
     report: Mapping[str, Any],
     *,
     now: datetime | None = None,
+    require_fresh: bool = True,
 ) -> dict[str, Any]:
     """Require a fresh credential check that sent no prompt or CAD data."""
 
@@ -709,15 +741,18 @@ def validate_live_readiness(
         report.get("credential_fingerprint"), "credential_fingerprint", 64
     )
     created_at = _utc_datetime(report.get("created_at"), "readiness created_at")
-    current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
-        raise BenchmarkEvidenceError("The readiness comparison time must use UTC.")
-    current = current.astimezone(timezone.utc)
-    age = (current - created_at).total_seconds()
-    if age < -READINESS_FUTURE_TOLERANCE_SECONDS:
-        raise BenchmarkEvidenceError("The provider readiness result is from the future.")
-    if age > READINESS_MAX_AGE_SECONDS:
-        raise BenchmarkEvidenceError("The provider readiness result is stale.")
+    if require_fresh:
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            raise BenchmarkEvidenceError("The readiness comparison time must use UTC.")
+        current = current.astimezone(timezone.utc)
+        age = (current - created_at).total_seconds()
+        if age < -READINESS_FUTURE_TOLERANCE_SECONDS:
+            raise BenchmarkEvidenceError(
+                "The provider readiness result is from the future."
+            )
+        if age > READINESS_MAX_AGE_SECONDS:
+            raise BenchmarkEvidenceError("The provider readiness result is stale.")
     return dict(report)
 
 
@@ -728,6 +763,17 @@ def readiness_digest(report: Mapping[str, Any]) -> str:
         raise BenchmarkEvidenceError("The provider readiness result must be an object.")
     encoded = json.dumps(
         dict(report), ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def runtime_identity_digest(identity: Mapping[str, Any]) -> str:
+    """Bind a run to the exact validated runtime identity object."""
+
+    if not isinstance(identity, Mapping):
+        raise BenchmarkEvidenceError("The live runtime identity must be an object.")
+    encoded = json.dumps(
+        dict(identity), ensure_ascii=True, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -743,86 +789,474 @@ def limits_digest(limits: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def recover_partial_case_metrics(
-    partial: Mapping[str, Any], *, now_epoch: float | None = None
-) -> dict[str, Any]:
-    """Recover measured values for a failed case without replacing them with zero."""
+def empty_partial_case_metrics() -> dict[str, Any]:
+    """Return explicit empty metrics for a case with no trusted checkpoint."""
 
-    zero_usage = {
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "cached_input_tokens": 0,
-        "reasoning_tokens": 0,
-        "total_tokens": 0,
-        "cost_usd": None,
+    return {
+        "elapsed_seconds": 0.0,
+        "events": [],
+        "retained_event_bytes": 0,
+        "dropped_event_count": 0,
+        "event_evidence_complete": True,
+        "question_count": 0,
+        "unnecessary_question_count": 0,
+        "retry_count": 0,
+        "tool_call_count": 0,
+        "api_request_count": 0,
+        "provider_turns_observed": [],
+        "usage_event_count": 0,
+        "usage_mode": None,
+        "usage_complete": True,
+        "missing_usage_turns": [],
+        "usage_integrity_errors": [],
+        "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_input_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "estimated_cost_usd": None,
+        },
+        "limit_error": None,
     }
-    if (
-        not isinstance(partial, Mapping)
-        or partial.get("schema") != "vibecad-live-partial-metrics-v1"
-    ):
-        return {
-            "elapsed_seconds": 0.0,
-            "events": [],
-            "question_count": 0,
-            "unnecessary_question_count": 0,
-            "retry_count": 0,
-            "tool_call_count": 0,
-            "api_request_count": 0,
-            "provider_turns_observed": [],
-            "usage_event_count": 0,
-            "usage": zero_usage,
-        }
-    raw = partial.get("measurements")
-    metrics = raw if isinstance(raw, Mapping) else {}
 
-    def count(name: str) -> int:
-        value = metrics.get(name)
-        return (
-            int(value)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+def _finite_number(value: Any, field: str, *, minimum: float = 0.0) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < minimum
+    ):
+        raise BenchmarkEvidenceError(f"{field} must be a finite number.")
+    return float(value)
+
+
+def _bounded_count(value: Any, field: str, maximum: int) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < 0
+        or value > maximum
+    ):
+        raise BenchmarkEvidenceError(f"{field} is outside its fixed bound.")
+    return value
+
+
+def _validate_partial_usage(value: Any) -> dict[str, Any]:
+    expected = {
+        "input_tokens",
+        "output_tokens",
+        "cached_input_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "estimated_cost_usd",
+    }
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise BenchmarkEvidenceError("Partial normalized usage is invalid.")
+    result = dict(value)
+    for field in expected - {"estimated_cost_usd"}:
+        _bounded_count(result.get(field), f"partial usage {field}", 10**12)
+    if result["total_tokens"] < result["input_tokens"] + result["output_tokens"]:
+        raise BenchmarkEvidenceError("Partial normalized usage is inconsistent.")
+    cost = result.get("estimated_cost_usd")
+    if cost is not None:
+        _finite_number(cost, "partial usage estimated_cost_usd")
+    return result
+
+
+def validate_partial_metrics_checkpoint(
+    partial: Mapping[str, Any],
+    *,
+    expected_case_id: str | None = None,
+    expected_source_commit: str | None = None,
+    expected_readiness_sha256: str | None = None,
+    expected_runtime_identity_sha256: str | None = None,
+    expected_run_nonce: str | None = None,
+) -> dict[str, Any]:
+    """Validate one content-bound v2 partial metrics checkpoint."""
+
+    if not isinstance(partial, Mapping):
+        raise BenchmarkEvidenceError("The partial metrics checkpoint must be an object.")
+    expected_fields = {
+        "schema",
+        "version",
+        "case_id",
+        "source_commit",
+        "readiness_sha256",
+        "runtime_identity_sha256",
+        "run_nonce",
+        "started_at_epoch",
+        "updated_at_epoch",
+        "checkpoint_sequence",
+        "provider_class",
+        "fixture",
+        "measurements",
+    }
+    if set(partial) != expected_fields:
+        raise BenchmarkEvidenceError(
+            "The partial metrics checkpoint has missing or unknown fields."
+        )
+    if (
+        partial.get("schema") != LIVE_PARTIAL_METRICS_SCHEMA
+        or partial.get("version") != LIVE_PARTIAL_METRICS_VERSION
+    ):
+        raise BenchmarkEvidenceError("The partial metrics contract is invalid.")
+    case_id = partial.get("case_id")
+    if not isinstance(case_id, str) or case_id not in TIER1_CASE_IDS:
+        raise BenchmarkEvidenceError("The partial metrics case ID is invalid.")
+    if expected_case_id is not None and case_id != expected_case_id:
+        raise BenchmarkEvidenceError("The partial metrics case binding does not match.")
+    source_commit = _hex_value(
+        partial.get("source_commit"), "partial source_commit", 40
+    )
+    readiness_sha256 = _hex_value(
+        partial.get("readiness_sha256"), "partial readiness_sha256", 64
+    )
+    runtime_sha256 = _hex_value(
+        partial.get("runtime_identity_sha256"),
+        "partial runtime_identity_sha256",
+        64,
+    )
+    run_nonce = _hex_value(partial.get("run_nonce"), "partial run_nonce", 64)
+    bindings = (
+        (expected_source_commit, source_commit, "source commit"),
+        (expected_readiness_sha256, readiness_sha256, "readiness"),
+        (expected_runtime_identity_sha256, runtime_sha256, "runtime identity"),
+        (expected_run_nonce, run_nonce, "run nonce"),
+    )
+    for expected, observed, name in bindings:
+        if expected is not None and expected != observed:
+            raise BenchmarkEvidenceError(
+                f"The partial metrics {name} binding does not match."
+            )
+    started = _finite_number(
+        partial.get("started_at_epoch"), "partial started_at_epoch", minimum=1.0
+    )
+    updated = _finite_number(
+        partial.get("updated_at_epoch"), "partial updated_at_epoch", minimum=1.0
+    )
+    if updated < started:
+        raise BenchmarkEvidenceError("The partial metrics update time is invalid.")
+    _bounded_count(
+        partial.get("checkpoint_sequence"),
+        "partial checkpoint_sequence",
+        10**9,
+    )
+    provider_class = partial.get("provider_class")
+    if not isinstance(provider_class, str) or len(provider_class) > 128:
+        raise BenchmarkEvidenceError("The partial provider class is invalid.")
+    fixture = partial.get("fixture")
+    if fixture is not None:
+        if not isinstance(fixture, Mapping) or set(fixture) != {
+            "kind",
+            "canonical_sha256",
+            "object_names",
+        }:
+            raise BenchmarkEvidenceError("The partial fixture contract is invalid.")
+        if fixture.get("kind") != "benchmark_setup":
+            raise BenchmarkEvidenceError("The partial fixture kind is invalid.")
+        _hex_value(
+            fixture.get("canonical_sha256"),
+            "partial fixture canonical_sha256",
+            64,
+        )
+        names = fixture.get("object_names")
+        if (
+            not isinstance(names, list)
+            or len(names) > 10_000
+            or any(
+                not isinstance(name, str) or not name or len(name) > 512
+                for name in names
+            )
+        ):
+            raise BenchmarkEvidenceError("The partial fixture object names are invalid.")
+
+    metrics = partial.get("measurements")
+    metric_fields = set(empty_partial_case_metrics())
+    if not isinstance(metrics, Mapping) or set(metrics) != metric_fields:
+        raise BenchmarkEvidenceError(
+            "The partial measurements have missing or unknown fields."
+        )
+    elapsed = _finite_number(
+        metrics.get("elapsed_seconds"), "partial elapsed_seconds"
+    )
+    if elapsed > LIVE_CASE_TOTAL_TIMEOUT_SECONDS + 60.0:
+        raise BenchmarkEvidenceError("The partial elapsed time is outside its bound.")
+    events = metrics.get("events")
+    if (
+        not isinstance(events, list)
+        or len(events) > LIVE_MAX_RETAINED_PROGRESS_EVENTS
+    ):
+        raise BenchmarkEvidenceError("The partial progress event count is invalid.")
+    observed_event_bytes = 0
+    for index, event in enumerate(events):
+        if not isinstance(event, Mapping):
+            raise BenchmarkEvidenceError(
+                f"Partial progress event {index} is not an object."
+            )
+        try:
+            encoded = json.dumps(
+                dict(event),
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise BenchmarkEvidenceError(
+                f"Partial progress event {index} is not finite JSON."
+            ) from exc
+        if len(encoded) > LIVE_MAX_PROGRESS_EVENT_BYTES:
+            raise BenchmarkEvidenceError(
+                f"Partial progress event {index} exceeds its byte bound."
+            )
+        observed_event_bytes += len(encoded)
+        event_name = event.get("event")
+        if not isinstance(event_name, str) or not event_name:
+            raise BenchmarkEvidenceError(
+                f"Partial progress event {index} has no event name."
+            )
+        if event_name in {"provider_text_delta", "provider_reasoning_delta"}:
+            if "text" in event or "delta" in event:
+                raise BenchmarkEvidenceError(
+                    f"Partial progress event {index} contains unredacted model text."
+                )
+            _bounded_count(
+                event.get("text_length"),
+                f"partial progress event {index} text_length",
+                10**9,
+            )
+            _hex_value(
+                event.get("text_sha256"),
+                f"partial progress event {index} text_sha256",
+                64,
+            )
+    if observed_event_bytes > LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES:
+        raise BenchmarkEvidenceError(
+            "The partial progress event ledger exceeds its total byte bound."
+        )
+    retained_event_bytes = _bounded_count(
+        metrics.get("retained_event_bytes"),
+        "partial retained_event_bytes",
+        LIVE_MAX_PROGRESS_EVENTS_TOTAL_BYTES,
+    )
+    if retained_event_bytes != observed_event_bytes:
+        raise BenchmarkEvidenceError(
+            "The partial progress event byte count is inconsistent."
+        )
+    dropped = _bounded_count(
+        metrics.get("dropped_event_count"),
+        "partial dropped_event_count",
+        10**9,
+    )
+    if not isinstance(metrics.get("event_evidence_complete"), bool):
+        raise BenchmarkEvidenceError(
+            "The partial event-evidence completion state is invalid."
+        )
+    if metrics["event_evidence_complete"] is not (dropped == 0):
+        raise BenchmarkEvidenceError(
+            "The partial event-evidence completion state is inconsistent."
+        )
+    questions = _bounded_count(
+        metrics.get("question_count"),
+        "partial question_count",
+        LIVE_MAX_QUESTIONS_PER_CASE,
+    )
+    unnecessary = _bounded_count(
+        metrics.get("unnecessary_question_count"),
+        "partial unnecessary_question_count",
+        LIVE_MAX_QUESTIONS_PER_CASE,
+    )
+    if unnecessary > questions:
+        raise BenchmarkEvidenceError("The partial question counts are inconsistent.")
+    _bounded_count(
+        metrics.get("retry_count"),
+        "partial retry_count",
+        LIVE_VISIBLE_RETRY_EVENTS_PER_CASE + 1,
+    )
+    _bounded_count(
+        metrics.get("tool_call_count"),
+        "partial tool_call_count",
+        LIVE_TOOL_CALLS_PER_CASE + 1,
+    )
+    request_count = _bounded_count(
+        metrics.get("api_request_count"),
+        "partial api_request_count",
+        LIVE_PROVIDER_TURNS_PER_CASE,
+    )
+    turns = metrics.get("provider_turns_observed")
+    if (
+        not isinstance(turns, list)
+        or turns != list(range(1, request_count + 1))
+    ):
+        raise BenchmarkEvidenceError(
+            "The partial request turns are incomplete or reordered."
+        )
+    usage_event_count = _bounded_count(
+        metrics.get("usage_event_count"),
+        "partial usage_event_count",
+        request_count,
+    )
+    mode = metrics.get("usage_mode")
+    if mode not in {None, "incremental", "cumulative"}:
+        raise BenchmarkEvidenceError("The partial usage mode is invalid.")
+    if (usage_event_count == 0) is not (mode is None):
+        raise BenchmarkEvidenceError("The partial usage mode is inconsistent.")
+    if not isinstance(metrics.get("usage_complete"), bool):
+        raise BenchmarkEvidenceError("The partial usage completion state is invalid.")
+    missing = metrics.get("missing_usage_turns")
+    expected_missing_count = request_count - usage_event_count
+    if (
+        not isinstance(missing, list)
+        or len(missing) != expected_missing_count
+        or missing != sorted(set(missing))
+        or any(turn not in turns for turn in missing)
+    ):
+        raise BenchmarkEvidenceError("The partial missing-usage turns are invalid.")
+    errors = metrics.get("usage_integrity_errors")
+    if (
+        not isinstance(errors, list)
+        or len(errors) > LIVE_MAX_PROGRESS_INTEGRITY_ERRORS
+        or any(
+            not isinstance(error, str) or not error or len(error) > 512
+            for error in errors
+        )
+    ):
+        raise BenchmarkEvidenceError("The partial usage integrity errors are invalid.")
+    expected_complete = not missing and not errors
+    if metrics["usage_complete"] is not expected_complete:
+        raise BenchmarkEvidenceError(
+            "The partial usage completion state is inconsistent."
+        )
+    _validate_partial_usage(metrics.get("usage"))
+    limit_error = metrics.get("limit_error")
+    if limit_error is not None and (
+        not isinstance(limit_error, str)
+        or not limit_error
+        or len(limit_error) > 512
+    ):
+        raise BenchmarkEvidenceError("The partial limit error is invalid.")
+    try:
+        encoded_partial = json.dumps(
+            dict(partial),
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise BenchmarkEvidenceError(
+            "The partial metrics checkpoint is not finite JSON."
+        ) from exc
+    if len(encoded_partial) > LIVE_MAX_PARTIAL_CHECKPOINT_BYTES:
+        raise BenchmarkEvidenceError(
+            "The partial metrics checkpoint exceeds its byte bound."
+        )
+    return dict(partial)
+
+
+def recover_partial_case_metrics(
+    partial: Mapping[str, Any],
+    *,
+    now_epoch: float | None = None,
+    expected_case_id: str | None = None,
+    expected_source_commit: str | None = None,
+    expected_readiness_sha256: str | None = None,
+    expected_runtime_identity_sha256: str | None = None,
+    expected_run_nonce: str | None = None,
+) -> dict[str, Any]:
+    """Recover trusted failed-case metrics without claiming unknown usage."""
+
+    if (
+        isinstance(partial, Mapping)
+        and partial.get("schema") == LIVE_PARTIAL_METRICS_SCHEMA
+    ):
+        validated = validate_partial_metrics_checkpoint(
+            partial,
+            expected_case_id=expected_case_id,
+            expected_source_commit=expected_source_commit,
+            expected_readiness_sha256=expected_readiness_sha256,
+            expected_runtime_identity_sha256=expected_runtime_identity_sha256,
+            expected_run_nonce=expected_run_nonce,
+        )
+        metrics = dict(validated["measurements"])
+        started_epoch = float(validated["started_at_epoch"])
+    elif (
+        isinstance(partial, Mapping)
+        and partial.get("schema") == "vibecad-live-partial-metrics-v1"
+    ):
+        # Version 1 is read-only compatibility for retained pre-v2 evidence.
+        raw = partial.get("measurements")
+        raw_metrics = raw if isinstance(raw, Mapping) else {}
+        metrics = empty_partial_case_metrics()
+        for field in (
+            "events",
+            "question_count",
+            "unnecessary_question_count",
+            "retry_count",
+            "tool_call_count",
+            "api_request_count",
+            "provider_turns_observed",
+            "usage_event_count",
+            "usage",
+            "elapsed_seconds",
+        ):
+            if field in raw_metrics:
+                metrics[field] = raw_metrics[field]
+        metrics["events"] = list(metrics.get("events") or [])
+        metrics["retained_event_bytes"] = sum(
+            len(
+                json.dumps(
+                    event, sort_keys=True, separators=(",", ":"), default=str
+                ).encode("utf-8")
+            )
+            for event in metrics["events"]
+            if isinstance(event, Mapping)
+        )
+        requests = metrics.get("api_request_count")
+        usage_events = metrics.get("usage_event_count")
+        request_count = (
+            requests
+            if isinstance(requests, int)
+            and not isinstance(requests, bool)
+            and requests >= 0
             else 0
         )
+        usage_count = (
+            usage_events
+            if isinstance(usage_events, int)
+            and not isinstance(usage_events, bool)
+            and usage_events >= 0
+            else 0
+        )
+        turns = list(metrics.get("provider_turns_observed") or [])
+        metrics["missing_usage_turns"] = turns[usage_count:request_count]
+        metrics["usage_complete"] = usage_count == request_count
+        metrics["usage_mode"] = "incremental" if usage_count else None
+        started_value = partial.get("started_at_epoch")
+        started_epoch = (
+            float(started_value)
+            if isinstance(started_value, (int, float))
+            and not isinstance(started_value, bool)
+            and math.isfinite(float(started_value))
+            else 0.0
+        )
+    else:
+        return empty_partial_case_metrics()
 
-    elapsed = metrics.get("elapsed_seconds")
-    elapsed_seconds = (
-        float(elapsed)
-        if isinstance(elapsed, (int, float))
-        and not isinstance(elapsed, bool)
-        and elapsed >= 0
-        else 0.0
-    )
-    started_epoch = partial.get("started_at_epoch")
-    if (
-        now_epoch is not None
-        and isinstance(started_epoch, (int, float))
-        and not isinstance(started_epoch, bool)
-    ):
-        elapsed_seconds = max(
-            elapsed_seconds, max(0.0, float(now_epoch) - float(started_epoch))
+    if now_epoch is not None:
+        current = _finite_number(now_epoch, "partial recovery time", minimum=1.0)
+        elapsed = max(
+            float(metrics.get("elapsed_seconds") or 0.0),
+            max(0.0, current - started_epoch),
         )
-    turns = metrics.get("provider_turns_observed")
-    observed_turns = (
-        sorted(
-            value
-            for value in turns
-            if isinstance(value, int) and not isinstance(value, bool) and value > 0
-        )
-        if isinstance(turns, list)
-        else []
-    )
-    usage = metrics.get("usage")
-    return {
-        "elapsed_seconds": elapsed_seconds,
-        "events": list(metrics.get("events") or []),
-        "question_count": count("question_count"),
-        "unnecessary_question_count": count("unnecessary_question_count"),
-        "retry_count": count("retry_count"),
-        "tool_call_count": count("tool_call_count"),
-        "api_request_count": count("api_request_count"),
-        "provider_turns_observed": observed_turns,
-        "usage_event_count": count("usage_event_count"),
-        "usage": dict(usage) if isinstance(usage, Mapping) else zero_usage,
-    }
+        if elapsed > LIVE_CASE_TOTAL_TIMEOUT_SECONDS + 60.0:
+            raise BenchmarkEvidenceError(
+                "The partial metrics checkpoint is stale for failed-case recovery."
+            )
+        metrics["elapsed_seconds"] = elapsed
+    return metrics
 
 
 def persist_partial_metrics_checkpoint(
@@ -831,11 +1265,34 @@ def persist_partial_metrics_checkpoint(
     path: Path,
     *,
     writer: Any = atomic_write_json,
-) -> None:
-    """Update recoverable memory before a fallible checkpoint write."""
+    now_monotonic: float | None = None,
+    minimum_interval_seconds: float = LIVE_PARTIAL_CHECKPOINT_INTERVAL_SECONDS,
+    force: bool = False,
+) -> bool:
+    """Keep memory current and limit repeated full-ledger checkpoint writes."""
 
     state["partial"] = dict(payload)
+    interval = _finite_number(
+        minimum_interval_seconds,
+        "partial checkpoint interval",
+    )
+    current = (
+        _finite_number(now_monotonic, "partial checkpoint time")
+        if now_monotonic is not None
+        else __import__("time").monotonic()
+    )
+    previous = state.get("_partial_checkpoint_written_at")
+    if (
+        not force
+        and isinstance(previous, (int, float))
+        and not isinstance(previous, bool)
+        and math.isfinite(float(previous))
+        and current - float(previous) < interval
+    ):
+        return False
     writer(path, payload)
+    state["_partial_checkpoint_written_at"] = current
+    return True
 
 
 def require_complete_partial_usage(metrics: Mapping[str, Any]) -> None:
@@ -843,7 +1300,8 @@ def require_complete_partial_usage(metrics: Mapping[str, Any]) -> None:
 
     requests = metrics.get("api_request_count")
     usage_events = metrics.get("usage_event_count")
-    if (
+    explicitly_complete = metrics.get("usage_complete")
+    if explicitly_complete is False or (
         isinstance(requests, int)
         and not isinstance(requests, bool)
         and requests > 0
@@ -874,6 +1332,8 @@ def validate_runtime_identity(
         "gui_entry_sha256",
         "gui_runner_sha256",
         "case_catalog_sha256",
+        "runtime_files",
+        "provider_runtime",
     }
     if set(identity) != expected_fields:
         raise BenchmarkEvidenceError(
@@ -909,7 +1369,154 @@ def validate_runtime_identity(
     _hex_value(
         identity.get("case_catalog_sha256"), "runtime case_catalog_sha256", 64
     )
+    runtime_files = identity.get("runtime_files")
+    if not isinstance(runtime_files, list):
+        raise BenchmarkEvidenceError(
+            "The live runtime identity has no exact runtime file list."
+        )
+    observed_roles: list[str] = []
+    observed_paths: set[str] = set()
+    for index, item in enumerate(runtime_files):
+        if not isinstance(item, Mapping) or set(item) != {
+            "role",
+            "path",
+            "size",
+            "sha256",
+        }:
+            raise BenchmarkEvidenceError(
+                f"Live runtime file {index} has an invalid contract."
+            )
+        role = item.get("role")
+        path = item.get("path")
+        size = item.get("size")
+        if not isinstance(role, str) or role not in LIVE_RUNTIME_FILE_ROLES:
+            raise BenchmarkEvidenceError(
+                f"Live runtime file {index} has an invalid role."
+            )
+        if (
+            not isinstance(path, str)
+            or not path
+            or path.startswith(("/", "\\"))
+            or "\\" in path
+            or any(component in {"", ".", ".."} for component in path.split("/"))
+            or path in observed_paths
+        ):
+            raise BenchmarkEvidenceError(
+                f"Live runtime file {index} has an invalid or duplicate path."
+            )
+        if (
+            isinstance(size, bool)
+            or not isinstance(size, int)
+            or size <= 0
+            or size > 1024 * 1024 * 1024
+        ):
+            raise BenchmarkEvidenceError(
+                f"Live runtime file {index} has an invalid size."
+            )
+        _hex_value(item.get("sha256"), f"runtime file {index} sha256", 64)
+        observed_roles.append(role)
+        observed_paths.add(path)
+    if tuple(observed_roles) != LIVE_RUNTIME_FILE_ROLES:
+        raise BenchmarkEvidenceError(
+            "The live runtime identity file roles are incomplete or reordered."
+        )
+    provider_runtime = identity.get("provider_runtime")
+    if not isinstance(provider_runtime, Mapping) or set(provider_runtime) != {
+        "schema",
+        "version",
+        "platform",
+        "python",
+        "provider_modules",
+        "loaded_python_files",
+        "distributions",
+        "native_libraries",
+        "components",
+    }:
+        raise BenchmarkEvidenceError(
+            "The provider runtime attestation has an invalid contract."
+        )
+    if (
+        provider_runtime.get("schema")
+        != "vibecad-provider-runtime-attestation-v1"
+        or provider_runtime.get("version") != 1
+        or provider_runtime.get("platform") != "darwin"
+    ):
+        raise BenchmarkEvidenceError(
+            "The provider runtime attestation identity is invalid."
+        )
+    for field in (
+        "python",
+        "provider_modules",
+        "loaded_python_files",
+        "distributions",
+        "native_libraries",
+    ):
+        expected_type = Mapping if field == "python" else list
+        if not isinstance(provider_runtime.get(field), expected_type):
+            raise BenchmarkEvidenceError(
+                f"The provider runtime {field} value is invalid."
+            )
+    components = provider_runtime.get("components")
+    if not isinstance(components, list) or not components:
+        raise BenchmarkEvidenceError(
+            "The provider runtime has no exact component list."
+        )
+    previous_path = ""
+    for index, component in enumerate(components):
+        if not isinstance(component, Mapping) or set(component) != {
+            "path",
+            "size",
+            "sha256",
+        }:
+            raise BenchmarkEvidenceError(
+                f"Provider runtime component {index} has an invalid contract."
+            )
+        path = component.get("path")
+        size = component.get("size")
+        if (
+            not isinstance(path, str)
+            or not path
+            or path.startswith(("/", "\\"))
+            or "\\" in path
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or path <= previous_path
+        ):
+            raise BenchmarkEvidenceError(
+                f"Provider runtime component {index} has an invalid path."
+            )
+        if (
+            isinstance(size, bool)
+            or not isinstance(size, int)
+            or size < 0
+            or size > 1024 * 1024 * 1024
+        ):
+            raise BenchmarkEvidenceError(
+                f"Provider runtime component {index} has an invalid size."
+            )
+        _hex_value(
+            component.get("sha256"),
+            f"provider runtime component {index} sha256",
+            64,
+        )
+        previous_path = path
     return dict(identity)
+
+
+def live_run_unscorable_reasons(
+    case_runtime: Iterable[Mapping[str, Any]],
+) -> list[str]:
+    """Return stable reasons that block a raw run from human scoring."""
+
+    reasons: list[str] = []
+    for item in case_runtime:
+        case_id = str(item.get("case_id") or "unknown")
+        if item.get("usage_complete") is False:
+            reasons.append(f"{case_id}: provider usage evidence is incomplete.")
+        if item.get("event_evidence_complete") is False:
+            reasons.append(f"{case_id}: progress event evidence is incomplete.")
+        if item.get("partial_evidence_valid") is False:
+            reasons.append(f"{case_id}: partial checkpoint evidence is invalid.")
+    return reasons
 
 
 def validate_unrated_live_run(
@@ -917,12 +1524,17 @@ def validate_unrated_live_run(
     *,
     expected_case_ids: Iterable[str] = TIER1_CASE_IDS,
     require_runner_result: bool = False,
+    require_scorable: bool = True,
 ) -> dict[str, Any]:
-    """Validate a complete raw run without converting it to a score."""
+    """Validate raw evidence and optionally require evidence that can be scored."""
 
     if not isinstance(run, Mapping):
         raise BenchmarkEvidenceError("The live benchmark run must be an object.")
     expected_case_tuple = tuple(expected_case_ids)
+    version = run.get("version")
+    if run.get("schema") != LIVE_RUN_SCHEMA or version not in {1, LIVE_RUN_VERSION}:
+        raise BenchmarkEvidenceError("The live benchmark run contract is invalid.")
+    legacy = version == 1
     expected_fields = {
         "schema",
         "version",
@@ -940,14 +1552,14 @@ def validate_unrated_live_run(
         "scored",
         "case_attempts",
     }
+    if not legacy:
+        expected_fields.update({"run_nonce", "scorable", "unscorable_reasons"})
     if require_runner_result:
         expected_fields.add("runner")
     if set(run) != expected_fields:
         raise BenchmarkEvidenceError(
             "The live benchmark run contains missing or unknown top-level fields."
         )
-    if run.get("schema") != LIVE_RUN_SCHEMA or run.get("version") != LIVE_RUN_VERSION:
-        raise BenchmarkEvidenceError("The live benchmark run contract is invalid.")
     if run.get("tier") != 1:
         raise BenchmarkEvidenceError("The live benchmark run must use Tier 1.")
     _utc_datetime(run.get("created_at"), "live run created_at")
@@ -964,27 +1576,15 @@ def validate_unrated_live_run(
         raise BenchmarkEvidenceError("The live benchmark executor is invalid.")
     _hex_value(run.get("readiness_sha256"), "readiness_sha256", 64)
     _hex_value(run.get("runtime_identity_sha256"), "runtime_identity_sha256", 64)
+    if not legacy:
+        _hex_value(run.get("run_nonce"), "run_nonce", 64)
     if run.get("scored") is not False:
         raise BenchmarkEvidenceError("Raw live benchmark evidence must remain unscored.")
     limits = run.get("limits")
-    expected_limit_fields = {
-        "session_calls",
-        "provider_turns_per_case",
-        "visible_retry_events_per_case",
-        "tool_calls_per_case",
-        "provider_timeout_seconds",
-        "case_total_timeout_seconds",
-        "sdk_retries_per_request",
-        "worst_case_api_attempts",
-        "max_request_bytes",
-        "max_output_tokens_per_request",
-        "total_tokens_per_case",
-    }
-    if not isinstance(limits, Mapping) or set(limits) != expected_limit_fields:
+    if not isinstance(limits, Mapping) or set(limits) != set(LIVE_LIMITS):
         raise BenchmarkEvidenceError("The live benchmark execution limits are invalid.")
-    if expected_limit_fields != set(LIVE_LIMITS):
-        raise RuntimeError("The live benchmark limit validator is out of date.")
     limits_digest(limits)
+
     usage_fields = {
         "input_tokens",
         "output_tokens",
@@ -998,14 +1598,21 @@ def validate_unrated_live_run(
     for field in usage_fields:
         value = usage_summary.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise BenchmarkEvidenceError(f"The live benchmark usage field {field} is invalid.")
+            raise BenchmarkEvidenceError(
+                f"The live benchmark usage field {field} is invalid."
+            )
     if usage_summary["total_tokens"] < (
         usage_summary["input_tokens"] + usage_summary["output_tokens"]
     ):
         raise BenchmarkEvidenceError("The live benchmark token total is inconsistent.")
+
     case_runtime = run.get("case_runtime")
-    if not isinstance(case_runtime, list) or len(case_runtime) != len(expected_case_tuple):
-        raise BenchmarkEvidenceError("The live benchmark case runtime evidence is incomplete.")
+    if not isinstance(case_runtime, list) or len(case_runtime) != len(
+        expected_case_tuple
+    ):
+        raise BenchmarkEvidenceError(
+            "The live benchmark case runtime evidence is incomplete."
+        )
     runtime_fields = {
         "case_id",
         "provider_class",
@@ -1020,6 +1627,17 @@ def validate_unrated_live_run(
         "final_sha256",
         "isolated_validation_ok",
     }
+    if not legacy:
+        runtime_fields.update(
+            {
+                "usage_mode",
+                "usage_complete",
+                "missing_usage_turns",
+                "usage_integrity_error_count",
+                "event_evidence_complete",
+                "partial_evidence_valid",
+            }
+        )
     runtime_ids = []
     for item in case_runtime:
         if not isinstance(item, Mapping) or set(item) != runtime_fields:
@@ -1037,46 +1655,126 @@ def validate_unrated_live_run(
         ):
             value = item.get(field)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise BenchmarkEvidenceError(f"The live case runtime {field} is invalid.")
+                raise BenchmarkEvidenceError(
+                    f"The live case runtime {field} is invalid."
+                )
         turns = item.get("provider_turns_observed")
-        if not isinstance(turns, list) or any(
-            isinstance(value, bool) or not isinstance(value, int) or value <= 0
-            for value in turns
+        if (
+            not isinstance(turns, list)
+            or turns != list(range(1, item["api_request_count"] + 1))
+            or item["provider_turn_count"] != max(turns, default=0)
         ):
-            raise BenchmarkEvidenceError("The observed provider turns are invalid.")
-        if item["provider_turn_count"] != max(turns, default=0):
-            raise BenchmarkEvidenceError("The provider-turn count is inconsistent.")
+            raise BenchmarkEvidenceError(
+                "The request-to-usage provider turns are invalid."
+            )
         if item["provider_turn_count"] > limits["provider_turns_per_case"]:
             raise BenchmarkEvidenceError("A case exceeded the provider-turn limit.")
         if item["api_attempt_upper_bound"] != (
             item["api_request_count"] * (1 + limits["sdk_retries_per_request"])
         ):
             raise BenchmarkEvidenceError("The API-attempt upper bound is inconsistent.")
-        if item["usage_event_count"] != item["api_request_count"]:
-            raise BenchmarkEvidenceError(
-                "A live case has incomplete request-to-usage coverage."
+        if legacy:
+            if item["usage_event_count"] != item["api_request_count"]:
+                raise BenchmarkEvidenceError(
+                    "A live case has incomplete request-to-usage coverage."
+                )
+        else:
+            usage_complete = item.get("usage_complete")
+            if not isinstance(usage_complete, bool):
+                raise BenchmarkEvidenceError(
+                    "The live case usage completion state is invalid."
+                )
+            missing = item.get("missing_usage_turns")
+            expected_missing_count = (
+                item["api_request_count"] - item["usage_event_count"]
             )
-        if item["tool_call_count"] > limits["tool_calls_per_case"]:
-            raise BenchmarkEvidenceError("A case exceeded the tool-call limit.")
-        if item["retry_count"] > limits["visible_retry_events_per_case"]:
-            raise BenchmarkEvidenceError("A case exceeded the retry limit.")
-        if not isinstance(item.get("fixture"), Mapping) or item["fixture"].get("kind") != "benchmark_setup":
+            if (
+                item["usage_event_count"] > item["api_request_count"]
+                or not isinstance(missing, list)
+                or len(missing) != expected_missing_count
+                or missing != sorted(set(missing))
+                or any(turn not in turns for turn in missing)
+            ):
+                raise BenchmarkEvidenceError(
+                    "A live case has invalid request-to-usage coverage."
+                )
+            usage_mode = item.get("usage_mode")
+            if usage_mode not in {None, "incremental", "cumulative"}:
+                raise BenchmarkEvidenceError("The live case usage mode is invalid.")
+            if (item["usage_event_count"] == 0) is not (usage_mode is None):
+                raise BenchmarkEvidenceError(
+                    "The live case usage mode is inconsistent."
+                )
+            integrity_error_count = item.get("usage_integrity_error_count")
+            if (
+                isinstance(integrity_error_count, bool)
+                or not isinstance(integrity_error_count, int)
+                or integrity_error_count < 0
+                or integrity_error_count > LIVE_MAX_PROGRESS_INTEGRITY_ERRORS
+            ):
+                raise BenchmarkEvidenceError(
+                    "The live case usage integrity-error count is invalid."
+                )
+            if usage_complete is not (
+                not missing and integrity_error_count == 0
+            ):
+                raise BenchmarkEvidenceError(
+                    "The live case usage completion state is inconsistent."
+                )
+            if not isinstance(item.get("event_evidence_complete"), bool):
+                raise BenchmarkEvidenceError(
+                    "The live case event completion state is invalid."
+                )
+            if not isinstance(item.get("partial_evidence_valid"), bool):
+                raise BenchmarkEvidenceError(
+                    "The live case partial evidence state is invalid."
+                )
+        if item["tool_call_count"] > limits["tool_calls_per_case"] + 1:
+            raise BenchmarkEvidenceError("A case exceeded the tool-call evidence bound.")
+        if item["retry_count"] > limits["visible_retry_events_per_case"] + 1:
+            raise BenchmarkEvidenceError("A case exceeded the retry evidence bound.")
+        fixture = item.get("fixture")
+        if not isinstance(fixture, Mapping) or fixture.get("kind") != "benchmark_setup":
             raise BenchmarkEvidenceError("The benchmark setup evidence is invalid.")
         _hex_value(
-            item["fixture"].get("canonical_sha256"),
+            fixture.get("canonical_sha256"),
             "fixture canonical_sha256",
             64,
         )
-        object_names = item["fixture"].get("object_names")
+        object_names = fixture.get("object_names")
         if not isinstance(object_names, list) or any(
             not isinstance(name, str) or not name for name in object_names
         ):
-            raise BenchmarkEvidenceError("The benchmark setup object identities are invalid.")
+            raise BenchmarkEvidenceError(
+                "The benchmark setup object identities are invalid."
+            )
         _hex_value(item.get("final_sha256"), "case final_sha256", 64)
         if not isinstance(item.get("isolated_validation_ok"), bool):
             raise BenchmarkEvidenceError("The isolated validation result is invalid.")
     if tuple(runtime_ids) != expected_case_tuple:
         raise BenchmarkEvidenceError("The live case runtime order is invalid.")
+
+    if legacy:
+        scorable = True
+    else:
+        reasons = run.get("unscorable_reasons")
+        expected_reasons = live_run_unscorable_reasons(case_runtime)
+        if (
+            not isinstance(reasons, list)
+            or reasons != expected_reasons
+            or any(
+                not isinstance(reason, str) or not reason or len(reason) > 512
+                for reason in reasons
+            )
+        ):
+            raise BenchmarkEvidenceError(
+                "The live benchmark unscorable reasons are inconsistent."
+            )
+        scorable = not reasons
+        if not isinstance(run.get("scorable"), bool) or run["scorable"] is not scorable:
+            raise BenchmarkEvidenceError(
+                "The live benchmark scoreability state is inconsistent."
+            )
 
     attempts = run.get("case_attempts")
     if not isinstance(attempts, list):
@@ -1097,6 +1795,11 @@ def validate_unrated_live_run(
     runtime_by_case = {item["case_id"]: item for item in case_runtime}
     for attempt in validated_attempts:
         runtime = runtime_by_case[attempt["case_id"]]
+        usage_is_complete = (
+            runtime["usage_event_count"] == runtime["api_request_count"]
+            if legacy
+            else runtime["usage_complete"] is True
+        )
         if attempt["passed"] and (
             runtime["provider_class"] != "OpenAIProvider"
             or runtime["api_request_count"] == 0
@@ -1104,6 +1807,7 @@ def validate_unrated_live_run(
             or runtime["provider_turn_count"] == 0
             or runtime["provider_turns_observed"]
             != list(range(1, runtime["provider_turn_count"] + 1))
+            or not usage_is_complete
             or attempt["normalized_usage"]["total_tokens"] == 0
             or runtime["isolated_validation_ok"] is not True
         ):
@@ -1111,13 +1815,14 @@ def validate_unrated_live_run(
                 "A passed live case lacks provider-turn, usage, or isolated-validation evidence."
             )
     for field in usage_fields:
-        observed = sum(
+        observed_usage = sum(
             attempt["normalized_usage"][field] for attempt in validated_attempts
         )
-        if usage_summary[field] != observed:
+        if usage_summary[field] != observed_usage:
             raise BenchmarkEvidenceError(
                 f"The live benchmark aggregate usage field {field} is inconsistent."
             )
+
     expected = set(expected_case_tuple)
     keys: set[tuple[str, int]] = set()
     for attempt in validated_attempts:
@@ -1142,19 +1847,20 @@ def validate_unrated_live_run(
             raise BenchmarkEvidenceError(
                 f"Live case {attempt.get('case_id')} has mismatched run identity."
             )
-    observed = {case_id for case_id, attempt in keys if attempt == 1}
-    if keys != {(case_id, 1) for case_id in expected} or observed != expected:
-        missing = sorted(expected - observed)
-        extra = sorted(observed - expected)
+    observed_cases = {case_id for case_id, attempt in keys if attempt == 1}
+    if (
+        keys != {(case_id, 1) for case_id in expected}
+        or observed_cases != expected
+    ):
+        missing = sorted(expected - observed_cases)
+        extra = sorted(observed_cases - expected)
         raise BenchmarkEvidenceError(
             f"The Tier 1 live case set is incomplete; missing={missing}, extra={extra}."
         )
 
     runner = run.get("runner")
     if require_runner_result:
-        if not isinstance(runner, Mapping):
-            raise BenchmarkEvidenceError("The live benchmark runner result is missing.")
-        if set(runner) != {
+        if not isinstance(runner, Mapping) or set(runner) != {
             "attempt",
             "case_evidence_passed",
             "gui_runner_exit_code",
@@ -1171,6 +1877,12 @@ def validate_unrated_live_run(
             raise BenchmarkEvidenceError("The GUI runner exit code is invalid.")
         if not isinstance(runner.get("gui_runner_reported_ok"), bool):
             raise BenchmarkEvidenceError("The GUI runner result is invalid.")
+        if runner.get("gui_runner_reported_ok") is not (
+            runner.get("gui_runner_exit_code") == 0
+        ):
+            raise BenchmarkEvidenceError(
+                "The GUI runner completion flag does not match its process exit."
+            )
         expected_runner_pass = (
             all(attempt["passed"] for attempt in validated_attempts)
             and runner.get("gui_runner_exit_code") == 0
@@ -1180,4 +1892,8 @@ def validate_unrated_live_run(
             raise BenchmarkEvidenceError(
                 "The live benchmark runner result does not match its cases and process exit."
             )
+    if require_scorable and not scorable:
+        raise BenchmarkEvidenceError(
+            "The live benchmark run is not scorable because evidence is incomplete."
+        )
     return dict(run)
