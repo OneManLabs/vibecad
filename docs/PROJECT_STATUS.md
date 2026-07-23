@@ -3,6 +3,41 @@
 Last update: 2026-07-22. Active work: Phase 1 packaging, Phase 4 live benchmark
 hardening, Phase 7 release hardening, and Phase 8 portability evidence.
 
+## P4-005 controlled-surface wire checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The reduced-scope attempt failed before every provider request.
+The session had approved and frozen a complete Part Design-to-Sketcher
+transition, but the ChatGPT wire validator validated the names as a normal
+single-workbench surface. The frozen contract now carries one explicit Boolean
+transition declaration. The wire validator checks that declaration and applies
+the same narrow union rule. The benchmark fixture now finds the rectangle width
+dimension by its actual `Distance` type. Partial checkpoints now contain only
+the three public fixture fields in their strict contract.
+
+Files changed: Modeling-surface validation, session surface snapshots, ChatGPT
+wire validation, live Tier 1 fixture and checkpoint handling, focused tests, and
+project records.
+
+Tests added: The ChatGPT dynamic-tool surface accepts a complete controlled
+Part Design-to-Sketcher transition and retains the two provider namespaces.
+
+Tests run: The focused ChatGPT, session, live-runner, and live-usage group passed
+119 tests.
+
+Results: The failed retained attempt sent zero provider requests and accepted no
+CAD change. The three harness defects are corrected in the tested source.
+
+Benchmark impact: No live-model pass rate is claimed.
+
+Known issues: A new exact-source seven-case attempt is required.
+
+Next milestone: Commit this checkpoint to OneManLabs and run the exact-source
+live Tier 1 benchmark.
+
+External blockers: None.
+
 ## Completed
 
 - Read repository agent rules, root product documentation, contribution rules, privacy and security files, build entry point, VibeCAD module inventory, macOS workflow inventory, provider architecture, project persistence, intent memory, transaction code, worker code, and validation surfaces.

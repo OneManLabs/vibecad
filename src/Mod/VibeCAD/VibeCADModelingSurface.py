@@ -402,6 +402,8 @@ def validate_surface_names(
                     and set(foreign).issubset(sketch_names)
                 ):
                     foreign = []
+                    if allowed is not None:
+                        allowed.update(sketch_names)
             if foreign:
                 raise ValueError(
                     f"The {workbench} native surface contains tools from another pack: "

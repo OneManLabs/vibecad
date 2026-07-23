@@ -545,7 +545,7 @@ def _seed_box(
     for index, constraint in enumerate(list(sketch_object.Constraints)):
         value = getattr(constraint, "Value", None)
         if (
-            str(getattr(constraint, "Type", "")) == "DistanceX"
+            str(getattr(constraint, "Type", "")) == "Distance"
             and isinstance(value, (int, float))
             and abs(abs(float(value)) - width) <= 1e-6
         ):
@@ -1298,6 +1298,11 @@ def _run_case(
     def checkpoint(*, force: bool = False) -> None:
         nonlocal checkpoint_sequence
         checkpoint_sequence += 1
+        checkpoint_fixture = {
+            "kind": str(fixture.get("kind") or "benchmark_setup"),
+            "canonical_sha256": str(fixture.get("canonical_sha256") or ""),
+            "object_names": list(fixture.get("object_names") or []),
+        }
         payload = {
             "schema": LIVE_PARTIAL_METRICS_SCHEMA,
             "version": LIVE_PARTIAL_METRICS_VERSION,
@@ -1310,7 +1315,7 @@ def _run_case(
             "updated_at_epoch": time.time(),
             "checkpoint_sequence": checkpoint_sequence,
             "provider_class": provider_class,
-            "fixture": fixture,
+            "fixture": checkpoint_fixture,
             "measurements": measurements.snapshot(),
         }
         validate_partial_metrics_checkpoint(

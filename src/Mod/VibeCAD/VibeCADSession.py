@@ -991,6 +991,7 @@ def _turn_start_tool_surface(
     return {
         "kind": "turn_start_snapshot",
         "frozen": True,
+        "controlled_sketch_transition": bool(allow_controlled_sketch_transition),
         "workbench": str(workbench or ""),
         "engine": resolved_engine,
         "domain": resolution.domain,

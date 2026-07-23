@@ -176,6 +176,37 @@ def test_codex_dynamic_tools_accept_one_domain_qualified_namespace() -> None:
     assert [namespace["name"] for namespace in tools] == ["core", "vibescript"]
 
 
+def test_codex_dynamic_tools_accept_a_controlled_partdesign_sketch_transition() -> None:
+    schemas = [
+        _tool_schema("partdesign.edit_sketch"),
+        _tool_schema("sketcher.draw_rectangle"),
+        _tool_schema("sketcher.close_sketch"),
+        _tool_schema("partdesign.pad"),
+    ]
+    context = {
+        "provider_tool_schemas": schemas,
+        "provider_tool_surface": session._turn_start_tool_surface(
+            "PartDesignWorkbench",
+            schemas,
+            allow_controlled_sketch_transition=True,
+        ),
+    }
+
+    tools, names = provider._codex_dynamic_tool_surface(context)
+
+    assert context["provider_tool_surface"]["controlled_sketch_transition"] is True
+    assert names == {
+        ("partdesign", "edit_sketch"): "partdesign.edit_sketch",
+        ("sketcher", "draw_rectangle"): "sketcher.draw_rectangle",
+        ("sketcher", "close_sketch"): "sketcher.close_sketch",
+        ("partdesign", "pad"): "partdesign.pad",
+    }
+    assert [namespace["name"] for namespace in tools] == [
+        "partdesign",
+        "sketcher",
+    ]
+
+
 def test_turn_start_surface_rejects_mixed_native_and_vibescript_namespaces() -> None:
     schemas = [
         _tool_schema("part.measure"),

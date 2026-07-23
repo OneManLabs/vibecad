@@ -360,6 +360,7 @@ def _codex_dynamic_tool_surface(
     expected_surface_fields = {
         "kind",
         "frozen",
+        "controlled_sketch_transition",
         "workbench",
         "engine",
         "domain",
@@ -425,6 +426,13 @@ def _codex_dynamic_tool_surface(
         )
     workbench = str(surface.get("workbench") or "") or None
     engine = str(surface.get("engine") or "")
+    controlled_sketch_transition = (
+        surface.get("controlled_sketch_transition") is True
+    )
+    if not isinstance(surface.get("controlled_sketch_transition"), bool):
+        raise ProviderUnavailable(
+            "The controlled sketch-transition declaration is invalid."
+        )
     resolution = resolve_modeling_surface(workbench, engine)
     if (
         surface.get("domain") != resolution.domain
@@ -436,11 +444,18 @@ def _codex_dynamic_tool_surface(
             "The modeling-engine/domain declaration does not match the frozen " "VibeCAD surface."
         )
     try:
+        allowed_names = set(resolution.tool_names)
+        if controlled_sketch_transition:
+            sketch_resolution = resolve_modeling_surface(
+                "SketcherWorkbench", engine
+            )
+            allowed_names.update(sketch_resolution.tool_names)
         validate_surface_names(
             workbench=workbench,
             engine=engine,
             names=schema_names,
-            allowed_names=resolution.tool_names,
+            allowed_names=allowed_names,
+            allow_controlled_sketch_transition=controlled_sketch_transition,
         )
     except ValueError as exc:
         raise ProviderUnavailable(str(exc)) from exc

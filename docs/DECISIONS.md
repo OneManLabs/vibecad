@@ -583,3 +583,15 @@ A Part Design scope can include Sketcher tools only when it also includes both
 ends of the existing controlled transition: `partdesign.edit_sketch` and
 `sketcher.close_sketch`. The union is frozen at turn start. Each call is still
 reauthorized against the live surface after the controlled transition.
+
+## D-074: A frozen provider surface declares a controlled sketch transition
+
+Date: 2026-07-22. Status: Accepted.
+
+A frozen turn-start surface has an explicit Boolean field that states whether
+the scope contains the controlled Part Design-to-Sketcher transition. The
+session and provider wire boundary apply the same narrow rule. The declaration
+is part of the validated surface contract, and its tool schemas remain
+content-bound. The rule permits Sketcher tools only when the scope contains
+both `partdesign.edit_sketch` and `sketcher.close_sketch`. It does not permit a
+general mixed-workbench surface.
