@@ -9,7 +9,7 @@ in the live state packet. There is no workflow phase machine or prose parser.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
 import json
@@ -805,6 +805,47 @@ def provider_tool_schemas(
         )
         for name in names
     ]
+
+
+def _scope_provider_context(
+    service: VibeCADService,
+    context: dict[str, Any],
+    requested_names: Iterable[str] | None,
+) -> dict[str, Any]:
+    """Freeze one explicit, least-context tool scope for a provider turn."""
+
+    if requested_names is None:
+        return context
+    names = tuple(dict.fromkeys(str(name or "").strip() for name in requested_names))
+    if not names or any(not name for name in names):
+        raise ValueError("A provider tool scope must contain nonempty tool names.")
+    workbench = str(context.get("workbench") or "") or None
+    resolution = resolve_service_surface(service, workbench)
+    allowed = set(resolution.tool_names)
+    schemas: list[dict[str, Any]] = []
+    for name in names:
+        if name not in allowed:
+            raise ValueError(
+                f"Provider tool scope contains a tool outside the active surface: {name}."
+            )
+        tool = service.registry.get(name)
+        if tool.safety not in PROVIDER_SAFE_LEVELS:
+            raise ValueError(
+                f"Provider tool scope contains an unsafe provider tool: {name}."
+            )
+        schemas.append(
+            _provider_schema_copy(
+                tool.to_schema(active_workbench=workbench)
+            )
+        )
+    scoped = dict(context)
+    scoped["provider_tool_schemas"] = schemas
+    scoped["provider_tool_surface"] = _turn_start_tool_surface(
+        workbench,
+        schemas,
+        resolution=resolution,
+    )
+    return scoped
 
 
 def _live_provider_surface_state(service: VibeCADService) -> dict[str, Any]:
@@ -2873,6 +2914,7 @@ def _run_session_turn(
     persist_input_as_user: bool,
     prompt_section: str,
     document_thread_dispatch: DocumentThreadDispatch | None,
+    provider_tool_scope: Iterable[str] | None,
 ) -> VibeCADResponse:
     clean_prompt = str(prompt or "").strip()
     if not clean_prompt:
@@ -2978,6 +3020,11 @@ def _run_session_turn(
     context, scope = _on_document_thread(
         document_thread_dispatch,
         capture_context_and_scope,
+    )
+    context = _scope_provider_context(
+        active_service,
+        context,
+        provider_tool_scope,
     )
     if defer_import_asset_hashing:
         # The manifest and up to 12 large STEP assets can require substantial
@@ -3383,6 +3430,7 @@ def run_prompt(
     question_callback: QuestionCallback | None = None,
     document_thread_dispatch: DocumentThreadDispatch | None = None,
     candidate_decision_callback: CandidateDecisionCallback | None = None,
+    provider_tool_scope: Iterable[str] | None = None,
 ) -> VibeCADResponse:
     return _run_session_turn(
         prompt,
@@ -3398,6 +3446,7 @@ def run_prompt(
         persist_input_as_user=True,
         prompt_section="CURRENT_USER_MESSAGE",
         document_thread_dispatch=document_thread_dispatch,
+        provider_tool_scope=provider_tool_scope,
     )
 
 
@@ -3555,6 +3604,7 @@ def run_sketch_close_continuation(
         persist_input_as_user=False,
         prompt_section="CURRENT_SESSION_EVENT",
         document_thread_dispatch=document_thread_dispatch,
+        provider_tool_scope=None,
     )
 
 

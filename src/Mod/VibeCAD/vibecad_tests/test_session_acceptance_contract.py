@@ -720,6 +720,62 @@ def test_managed_outbound_policy_removes_denied_tools_and_rehashes_surface() -> 
     assert filtered["provider_tool_surface"]["schema_sha256"] != "old"
 
 
+def test_explicit_provider_tool_scope_is_ordered_bounded_and_frozen(
+    monkeypatch,
+) -> None:
+    names = ("core.inspect", "partdesign.create_body")
+    resolution = SimpleNamespace(
+        tool_names=names,
+        engine="native",
+        domain="partdesign",
+        surface_id="native:partdesign",
+        available=True,
+        unavailable_reason="",
+    )
+
+    class Tool:
+        safety = session.SafetyLevel.READ
+
+        def __init__(self, name):
+            self.name = name
+
+        def to_schema(self, active_workbench=None):
+            return {
+                "name": self.name,
+                "description": self.name,
+                "parameters": {"type": "object"},
+            }
+
+    service = SimpleNamespace(
+        registry=SimpleNamespace(get=lambda name: Tool(name))
+    )
+    monkeypatch.setattr(
+        session,
+        "resolve_service_surface",
+        lambda _service, _workbench: resolution,
+    )
+    original = {
+        "workbench": "PartDesignWorkbench",
+        "provider_tool_schemas": [{"name": "unscoped"}],
+    }
+
+    scoped = session._scope_provider_context(
+        service,
+        original,
+        ("partdesign.create_body", "core.inspect", "core.inspect"),
+    )
+
+    assert original["provider_tool_schemas"] == [{"name": "unscoped"}]
+    assert [item["name"] for item in scoped["provider_tool_schemas"]] == [
+        "partdesign.create_body",
+        "core.inspect",
+    ]
+    assert scoped["provider_tool_surface"]["frozen"] is True
+    assert scoped["provider_tool_surface"]["schema_count"] == 2
+    with pytest.raises(ValueError, match="outside the active surface"):
+        session._scope_provider_context(service, original, ("project.export",))
+
+
 def test_ai_rbac_denial_happens_before_project_or_provider_side_effects() -> None:
     class Service:
         @staticmethod

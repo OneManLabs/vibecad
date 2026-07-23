@@ -814,6 +814,40 @@ OneManLabs, then run a new exact-source attempt.
 
 External blockers: None for the next attempt.
 
+## P4-005 least-context tool-scope checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: Each Tier 1 case now supplies one ordered, case-specific provider
+tool scope. The session validates the names against the active workbench and
+modeling surface, checks their provider safety classes, copies only the needed
+schemas, and freezes a new content-bound surface record. General application
+turns keep the full resolved surface when no scope is supplied.
+
+Files changed: Session context construction, live benchmark runner, focused
+session and benchmark tests, decisions, backlog, limitations, and status.
+
+Tests added: Scope ordering, duplicate removal, frozen schema evidence, unknown
+tool rejection, complete seven-case scope coverage, bounded scope size, and
+worker-thread event pumping.
+
+Tests run: The combined session acceptance, ChatGPT, live-usage, and live-launch
+group passed 117 tests. The installed VibeCAD scripts target rebuilt
+successfully.
+
+Results: The next live run will receive only the tools needed for each case.
+This reduces irrelevant context while preserving typed native CAD operations.
+
+Benchmark impact: No new live-model pass rate is claimed yet.
+
+Known issues: The previous run timed out with the full 40-tool surface while its
+CAD dispatch was blocked. A clean exact-source rerun is required.
+
+Next milestone: Commit the tested scope unit to OneManLabs and run all seven
+live Tier 1 cases from that exact clean commit.
+
+External blockers: None for the next live attempt.
+
 ## P4-005 GUI document-thread checkpoint: 2026-07-22
 
 Milestone: P4-005 live Tier 1 benchmark execution.

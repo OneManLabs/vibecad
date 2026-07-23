@@ -117,6 +117,18 @@ def test_live_provider_operation_runs_off_gui_thread_while_events_pump() -> None
     assert observed["pump"] is main_thread
 
 
+def test_each_live_case_has_one_bounded_case_specific_tool_scope() -> None:
+    assert set(live_runner.TIER1_TOOL_SCOPES) == set(TIER1_CASE_IDS)
+    for case_id, names in live_runner.TIER1_TOOL_SCOPES.items():
+        assert 1 <= len(names) <= 12, case_id
+        assert len(names) == len(set(names)), case_id
+        assert all(name and "." in name for name in names), case_id
+    assert "project.export" in live_runner.TIER1_TOOL_SCOPES["t1_export_stl"]
+    assert "partdesign.thickness" in live_runner.TIER1_TOOL_SCOPES[
+        "t1_hollow_enclosure"
+    ]
+
+
 def _partial(
     case_id: str = TIER1_CASE_IDS[0],
     *,

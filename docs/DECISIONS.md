@@ -567,3 +567,14 @@ The readiness process uses that key to HMAC a canonical account record and then
 creates the run-bound credential fingerprint. The GUI rechecks the same account
 with the same private key. The evidence contains neither input. A missing,
 linked, shared, malformed, or changed key fails closed.
+
+## D-073: Live benchmark turns use explicit least-context tool scopes
+
+Date: 2026-07-22. Status: Accepted.
+
+Each live benchmark case supplies an ordered set of provider tools that is
+sufficient for that case. The session validates every requested tool against
+the active modeling surface and provider safety class. It then freezes and
+hashes the reduced schema set. An empty, unknown, unsafe, or unavailable tool
+fails before the provider call. Normal application turns keep the complete
+resolved surface unless a caller supplies an explicit scope.

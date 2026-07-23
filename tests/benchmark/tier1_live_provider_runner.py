@@ -115,6 +115,68 @@ FOLLOW_UP_CASES = {
     "t1_mirror_feature",
     "t1_export_stl",
 }
+COMMON_TIER1_TOOLS = (
+    "core.inspect",
+    "core.update_design_brief",
+)
+TIER1_TOOL_SCOPES = {
+    "t1_exact_box": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.create_body",
+        "partdesign.create_sketch",
+        "partdesign.edit_sketch",
+        "sketcher.draw_rectangle",
+        "sketcher.close_sketch",
+        "partdesign.pad",
+    ),
+    "t1_centered_hole": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.create_body",
+        "partdesign.create_sketch",
+        "partdesign.edit_sketch",
+        "sketcher.draw_rectangle",
+        "sketcher.add_circle",
+        "sketcher.constrain",
+        "sketcher.close_sketch",
+        "partdesign.pad",
+    ),
+    "t1_round_edges": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.create_body",
+        "partdesign.create_sketch",
+        "partdesign.edit_sketch",
+        "sketcher.draw_rectangle",
+        "sketcher.close_sketch",
+        "partdesign.pad",
+        "partdesign.fillet",
+    ),
+    "t1_hollow_enclosure": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.find_subelements",
+        "partdesign.create_body",
+        "partdesign.create_sketch",
+        "partdesign.edit_sketch",
+        "sketcher.draw_rectangle",
+        "sketcher.close_sketch",
+        "partdesign.pad",
+        "partdesign.thickness",
+    ),
+    "t1_change_dimension": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.edit_sketch",
+        "sketcher.edit_constraint",
+        "sketcher.close_sketch",
+    ),
+    "t1_mirror_feature": (
+        *COMMON_TIER1_TOOLS,
+        "partdesign.find_subelements",
+        "partdesign.mirror",
+    ),
+    "t1_export_stl": (
+        *COMMON_TIER1_TOOLS,
+        "project.export",
+    ),
+}
 
 
 def _run_on_gui_worker(operation: Any, event_pump: Any) -> Any:
@@ -1295,6 +1357,7 @@ def _run_case(
                 cancellation_check=measurements.cancelled,
                 question_callback=questions,
                 document_thread_dispatch=VibeCADGui._dispatch_to_document_thread,
+                provider_tool_scope=TIER1_TOOL_SCOPES[case_id],
             ),
             Gui.updateGui,
         )
