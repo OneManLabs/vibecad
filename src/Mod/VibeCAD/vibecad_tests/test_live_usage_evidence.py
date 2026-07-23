@@ -50,12 +50,12 @@ RUNTIME_SHA256 = "c" * 64
 RUN_NONCE = "d" * 64
 
 
-def _request(turn: int) -> dict:
+def _request(turn: int, *, retries: int = 2) -> dict:
     return {
         "event": "provider_request_started",
         "turn": turn,
-        "sdk_max_retries": 2,
-        "api_attempt_ceiling": 3,
+        "sdk_max_retries": retries,
+        "api_attempt_ceiling": 1 + retries,
     }
 
 
@@ -74,6 +74,15 @@ def _usage(turn: int, *, mode: str = "incremental", total: int = 15) -> dict:
             "total_tokens": total,
         },
     }
+
+
+def test_request_monitor_accepts_a_lower_consistent_retry_ceiling() -> None:
+    measured = live_runner.Measurements()
+    measured.progress(_request(1, retries=0))
+    measured.progress(_usage(1, mode="cumulative"))
+
+    assert measured.limit_error is None
+    assert measured.snapshot()["api_request_count"] == 1
 
 
 def _partial(

@@ -227,10 +227,16 @@ class Measurements:
         self._request_turns.add(turn)
         self.provider_turns.add(turn)
         self.api_request_count = len(self._request_turns)
+        sdk_retries = item.get("sdk_max_retries")
+        attempt_ceiling = item.get("api_attempt_ceiling")
         if (
-            item.get("sdk_max_retries") != LIVE_SDK_RETRIES_PER_REQUEST
-            or item.get("api_attempt_ceiling")
-            != 1 + LIVE_SDK_RETRIES_PER_REQUEST
+            isinstance(sdk_retries, bool)
+            or not isinstance(sdk_retries, int)
+            or sdk_retries < 0
+            or sdk_retries > LIVE_SDK_RETRIES_PER_REQUEST
+            or isinstance(attempt_ceiling, bool)
+            or not isinstance(attempt_ceiling, int)
+            or attempt_ceiling != 1 + sdk_retries
         ):
             self._fail("The provider request retry contract changed.")
 

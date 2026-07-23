@@ -780,3 +780,36 @@ Next milestone: Commit and push the request-binding fix to OneManLabs. Rerun the
 seven cases from the new clean commit.
 
 External blockers: None for the next live attempt.
+
+## P4-005 provider retry-ceiling checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The next retained attempt exposed a provider-specific retry
+contract mismatch. ChatGPT correctly declared zero client retries and one
+attempt. The monitor required the OpenAI SDK ceiling of two retries and three
+attempts, so it stopped each turn before a result. The monitor now accepts a
+consistent declared retry value from zero through the global maximum. It still
+rejects Boolean, negative, excessive, and inconsistent values.
+
+Files changed: Live GUI benchmark monitor, live usage tests, and project records.
+
+Tests added: A zero-retry, one-attempt ChatGPT request binds to cumulative usage
+without weakening the global maximum.
+
+Tests run: The ChatGPT, live-usage, and live-launch group passed 90 tests. The
+installed VibeCAD scripts target rebuilt successfully.
+
+Results: Four requests started. No usage completed, no tool ran, and no CAD
+mutation was accepted. All canonical fixture hashes stayed unchanged. The run
+is retained and not scored.
+
+Benchmark impact: No live-model pass rate is claimed.
+
+Known issues: The GUI process again exited with signal 6 after evidence
+retention. Dependent follow-up fixtures could not run.
+
+Next milestone: Commit and push this tested provider-specific retry contract to
+OneManLabs, then run a new exact-source attempt.
+
+External blockers: None for the next attempt.
