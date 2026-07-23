@@ -744,3 +744,39 @@ Next milestone: Commit and push this tested fix only to OneManLabs. Run all seve
 live Tier 1 cases from that clean commit.
 
 External blockers: None for the live run.
+
+## P4-005 first retained live-attempt checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The exact-source run retained all seven failure records and did not
+accept any CAD mutation. It exposed a ChatGPT adapter event fault. The adapter
+sent real requests and emitted complete cumulative usage, but it did not emit
+`provider_request_started`. The benchmark monitor could not bind the usage to
+one request and cancelled each active turn. The adapter now emits one bounded
+request event before `turn/start`, with one turn, zero SDK retries, and one
+maximum API attempt.
+
+Files changed: ChatGPT subscription adapter, GUI benchmark runner import fallback,
+focused tests, and project records.
+
+Tests added: Exact ChatGPT request-event fields and request-byte measurement.
+
+Tests run: The ChatGPT, live-usage, and live-launch group passed 89 tests. The
+installed VibeCAD scripts target rebuilt successfully.
+
+Results: Four provider requests ran before the dependent follow-up fixtures
+failed. No tool call ran. No CAD mutation was accepted. All canonical CAD files
+stayed at their fixture hashes. The attempt failed honestly and is not scored.
+
+Benchmark impact: The retained run is a zero-pass harness failure. It is not a
+product pass-rate claim. A new exact-source attempt is required after commit.
+
+Known issues: The offscreen GUI process exited with signal 6 after it retained
+all seven records. Follow-up cases could not build fixtures because the earlier
+creation cases accepted no geometry.
+
+Next milestone: Commit and push the request-binding fix to OneManLabs. Rerun the
+seven cases from the new clean commit.
+
+External blockers: None for the next live attempt.

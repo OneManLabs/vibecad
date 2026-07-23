@@ -561,6 +561,28 @@ def _codex_tool_image_content_items(
     return items
 
 
+def _chatgpt_request_started_event(
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind one ChatGPT turn and its later usage to one bounded request."""
+
+    return {
+        "event": "provider_request_started",
+        "provider": "ChatGPT subscription",
+        "turn": 1,
+        "request_bytes": len(
+            json.dumps(
+                _json_safe(request),
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ),
+        "sdk_max_retries": 0,
+        "api_attempt_ceiling": 1,
+    }
+
+
 class ChatGPTSubscriptionProvider(BaseProvider):
     """ChatGPT subscription adapter backed by the official Codex app-server."""
 
@@ -946,6 +968,10 @@ class ChatGPTSubscriptionProvider(BaseProvider):
                 turn=1,
                 request=turn_request,
                 base_url=None,
+            )
+            _emit_provider_progress(
+                progress_callback,
+                _chatgpt_request_started_event(turn_request),
             )
             turn_result = client.request("turn/start", turn_request, timeout=30.0)
             turn = turn_result.get("turn") if isinstance(turn_result, dict) else None

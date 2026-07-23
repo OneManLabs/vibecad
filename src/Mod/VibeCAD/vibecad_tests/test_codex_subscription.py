@@ -590,6 +590,31 @@ def test_current_subscription_reasoning_efforts_are_preserved() -> None:
     assert preferences.normalize_reasoning_effort("ultra") == "ultra"
 
 
+def test_chatgpt_request_event_binds_usage_to_one_turn() -> None:
+    request = {
+        "threadId": "thread-1",
+        "input": [{"type": "text", "text": "Create a box."}],
+        "environments": [],
+    }
+    event = provider._chatgpt_request_started_event(request)
+
+    assert event == {
+        "event": "provider_request_started",
+        "provider": "ChatGPT subscription",
+        "turn": 1,
+        "request_bytes": len(
+            __import__("json").dumps(
+                request,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ),
+        "sdk_max_retries": 0,
+        "api_attempt_ceiling": 1,
+    }
+
+
 def test_choose_provider_carries_codex_capability_preferences() -> None:
     class _Service:
         def provider_name(self) -> str:
