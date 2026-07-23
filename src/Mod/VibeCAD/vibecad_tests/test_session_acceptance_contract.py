@@ -776,6 +776,75 @@ def test_explicit_provider_tool_scope_is_ordered_bounded_and_frozen(
         session._scope_provider_context(service, original, ("project.export",))
 
 
+def test_provider_scope_allows_only_a_complete_controlled_sketch_transition(
+    monkeypatch,
+) -> None:
+    part_resolution = session.ModelingSurface(
+        workbench="PartDesignWorkbench",
+        engine="native",
+        domain="partdesign",
+        surface_id="native:partdesign",
+        core_tool_names=("core.inspect",),
+        cad_tool_names=("partdesign.edit_sketch", "partdesign.pad"),
+        available=True,
+        unavailable_reason="",
+    )
+    sketch_resolution = session.ModelingSurface(
+        workbench="SketcherWorkbench",
+        engine="native",
+        domain="sketcher",
+        surface_id="native:sketcher",
+        core_tool_names=("core.inspect",),
+        cad_tool_names=("sketcher.draw_rectangle", "sketcher.close_sketch"),
+        available=True,
+        unavailable_reason="",
+    )
+
+    class Tool:
+        safety = session.SafetyLevel.SAFE_WRITE
+
+        def __init__(self, name):
+            self.name = name
+
+        def to_schema(self, active_workbench=None):
+            return {
+                "name": self.name,
+                "description": self.name,
+                "parameters": {"type": "object"},
+            }
+
+    service = SimpleNamespace(
+        registry=SimpleNamespace(get=lambda name: Tool(name))
+    )
+    monkeypatch.setattr(
+        session,
+        "resolve_service_surface",
+        lambda _service, workbench: (
+            sketch_resolution
+            if workbench == "SketcherWorkbench"
+            else part_resolution
+        ),
+    )
+    context = {"workbench": "PartDesignWorkbench"}
+    complete = (
+        "partdesign.edit_sketch",
+        "sketcher.draw_rectangle",
+        "sketcher.close_sketch",
+        "partdesign.pad",
+    )
+
+    scoped = session._scope_provider_context(service, context, complete)
+
+    assert scoped["provider_tool_surface"]["tool_names"] == list(complete)
+    assert scoped["provider_tool_surface"]["workbench"] == "PartDesignWorkbench"
+    with pytest.raises(ValueError, match="complete controlled sketch transition"):
+        session._scope_provider_context(
+            service,
+            context,
+            ("partdesign.edit_sketch", "sketcher.draw_rectangle"),
+        )
+
+
 def test_ai_rbac_denial_happens_before_project_or_provider_side_effects() -> None:
     class Service:
         @staticmethod

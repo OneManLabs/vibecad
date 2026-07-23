@@ -320,6 +320,7 @@ def validate_surface_names(
     engine: str,
     names: Iterable[str],
     allowed_names: Iterable[str] | None = None,
+    allow_controlled_sketch_transition: bool = False,
 ) -> None:
     """Reject mixed engines, workbenches, domains, or undeclared names."""
 
@@ -388,6 +389,19 @@ def validate_surface_names(
                 not in CORE_CONVERSATION_VIEW_TOOLS | NATIVE_ANALYSIS_TOOLS
                 and name not in set(pack.tool_names)
             ]
+            if foreign and allow_controlled_sketch_transition:
+                sketch_pack = get_tool_pack("SketcherWorkbench")
+                sketch_names = set(sketch_pack.tool_names) if sketch_pack else set()
+                required = {
+                    "partdesign.edit_sketch",
+                    "sketcher.close_sketch",
+                }
+                if (
+                    workbench == "PartDesignWorkbench"
+                    and required.issubset(clean_names)
+                    and set(foreign).issubset(sketch_names)
+                ):
+                    foreign = []
             if foreign:
                 raise ValueError(
                     f"The {workbench} native surface contains tools from another pack: "

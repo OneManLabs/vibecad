@@ -781,6 +781,38 @@ seven cases from the new clean commit.
 
 External blockers: None for the next live attempt.
 
+## P4-005 controlled sketch-surface checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 text-to-CAD execution.
+
+Implemented: The first clean reduced-scope run sent no provider request because
+the scope validator rejected future Sketcher tools while Part Design was
+active. The session now permits one explicit controlled union only when the
+scope contains both `partdesign.edit_sketch` and `sketcher.close_sketch`.
+Unknown, unrelated, incomplete, unsafe, and unavailable cross-surface scopes
+still fail before provider execution.
+
+Files changed: Modeling-surface validation, scoped session context, focused
+transition tests, decisions, status, and limitations.
+
+Tests added: Complete controlled sketch transition acceptance and incomplete
+transition rejection.
+
+Tests run: The session acceptance, live usage, and tool-surface guardrail group
+passed 86 tests.
+
+Results: The failed run retained seven records, made zero provider requests, and
+accepted no CAD changes. The next clean run can declare the bounded tools needed
+to create and close an editable sketch in one provider turn.
+
+Benchmark impact: No live text-to-CAD pass rate is claimed.
+
+Known issues: A new exact-source run is required.
+
+Next milestone: Commit to OneManLabs and rerun all seven live Tier 1 cases.
+
+External blockers: None.
+
 ## P4-005 provider retry-ceiling checkpoint: 2026-07-22
 
 Milestone: P4-005 live Tier 1 benchmark execution.

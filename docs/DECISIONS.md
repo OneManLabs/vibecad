@@ -578,3 +578,8 @@ the active modeling surface and provider safety class. It then freezes and
 hashes the reduced schema set. An empty, unknown, unsafe, or unavailable tool
 fails before the provider call. Normal application turns keep the complete
 resolved surface unless a caller supplies an explicit scope.
+
+A Part Design scope can include Sketcher tools only when it also includes both
+ends of the existing controlled transition: `partdesign.edit_sketch` and
+`sketcher.close_sketch`. The union is frozen at turn start. Each call is still
+reauthorized against the live surface after the controlled transition.

@@ -822,6 +822,46 @@ def _scope_provider_context(
     workbench = str(context.get("workbench") or "") or None
     resolution = resolve_service_surface(service, workbench)
     allowed = set(resolution.tool_names)
+    requested_set = set(names)
+    sketch_resolution: ModelingSurface | None = None
+    sketch_only_names: set[str] = set()
+    controlled_sketch_transition = False
+    if workbench == "PartDesignWorkbench":
+        sketch_resolution = resolve_service_surface(service, "SketcherWorkbench")
+        sketch_only_names = set(sketch_resolution.tool_names) - allowed
+        requested_sketch_names = requested_set & sketch_only_names
+        if requested_sketch_names:
+            required_transition_tools = {
+                "partdesign.edit_sketch",
+                "sketcher.close_sketch",
+            }
+            if not required_transition_tools.issubset(requested_set):
+                raise ValueError(
+                    "A provider tool scope with Sketcher tools must include the "
+                    "complete controlled sketch transition."
+                )
+            controlled_sketch_transition = True
+            allowed.update(sketch_resolution.tool_names)
+            resolution = ModelingSurface(
+                workbench=resolution.workbench,
+                engine=resolution.engine,
+                domain=resolution.domain,
+                surface_id=resolution.surface_id,
+                core_tool_names=resolution.core_tool_names,
+                cad_tool_names=tuple(
+                    dict.fromkeys(
+                        (
+                            *resolution.cad_tool_names,
+                            *sketch_resolution.cad_tool_names,
+                        )
+                    )
+                ),
+                available=resolution.available and sketch_resolution.available,
+                unavailable_reason=(
+                    resolution.unavailable_reason
+                    or sketch_resolution.unavailable_reason
+                ),
+            )
     schemas: list[dict[str, Any]] = []
     for name in names:
         if name not in allowed:
@@ -844,6 +884,7 @@ def _scope_provider_context(
         workbench,
         schemas,
         resolution=resolution,
+        allow_controlled_sketch_transition=controlled_sketch_transition,
     )
     return scoped
 
@@ -884,6 +925,7 @@ def _turn_start_tool_surface(
     *,
     resolution: ModelingSurface | None = None,
     engine: str | None = None,
+    allow_controlled_sketch_transition: bool = False,
 ) -> dict[str, Any]:
     """Validate and freeze the complete provider surface for one turn.
 
@@ -944,6 +986,7 @@ def _turn_start_tool_surface(
         engine=resolved_engine,
         names=names,
         allowed_names=resolution.tool_names,
+        allow_controlled_sketch_transition=allow_controlled_sketch_transition,
     )
     return {
         "kind": "turn_start_snapshot",
