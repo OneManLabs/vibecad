@@ -30,6 +30,7 @@ FAILURE_STAGES = frozenset(
         "schema",
         "surface",
         "edit_state",
+        "permission",
         "precondition",
         "native_call",
         "native_recompute",

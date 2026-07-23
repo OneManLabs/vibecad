@@ -1,0 +1,71 @@
+name: VibeCAD Portable Python Contract
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/vibecad-portability.yml"
+      - "src/Mod/VibeCAD/**/*.py"
+      - "pixi.toml"
+      - "pixi.lock"
+      - "tools/vibecad-portability-contract-v1.json"
+      - "tools/verify_vibecad_portability.py"
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - ".github/workflows/vibecad-portability.yml"
+      - "src/Mod/VibeCAD/**/*.py"
+      - "pixi.toml"
+      - "pixi.lock"
+      - "tools/vibecad-portability-contract-v1.json"
+      - "tools/verify_vibecad_portability.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-python:
+    name: Portable Python (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+    steps:
+      - name: Check out source without stored credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Use the product Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.14"
+
+      - name: Install the pinned test runner
+        run: python -m pip install --disable-pip-version-check pytest==8.4.1
+
+      - name: Verify and test the portable contract
+        run: >-
+          python tools/verify_vibecad_portability.py
+          --repo-root .
+          --contract tools/vibecad-portability-contract-v1.json
+          --source-sha "${{ github.sha }}"
+          --compile
+          --enforce-python
+          --run-tests
+          --report "portability-report-${{ runner.os }}.json"
+
+      - name: Retain the portability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portability-report-${{ runner.os }}
+          path: portability-report-${{ runner.os }}.json
+          if-no-files-found: error

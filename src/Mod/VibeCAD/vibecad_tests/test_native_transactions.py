@@ -86,3 +86,167 @@ def test_native_exception_aborts_candidate(monkeypatch) -> None:
     assert result["failure_code"] == "NATIVE_OPERATION_FAILED"
     assert result["rollback_succeeded"] is True
     assert doc.Objects == []
+
+
+def test_managed_property_change_has_exact_provenance(monkeypatch) -> None:
+    doc = _Document()
+    view = SimpleNamespace(
+        Name="VibeCADExplodedView",
+        Label="Exploded view",
+        TypeId="App::FeaturePython",
+        State=[],
+        PropertiesList=["VibeCADExplodedViewState"],
+        VibeCADExplodedViewState="exploded",
+    )
+    doc.Objects.append(view)
+    monkeypatch.setattr(App, "ActiveDocument", doc, raising=False)
+
+    def restore_metadata() -> dict:
+        view.VibeCADExplodedViewState = "assembled"
+        return {"view": view.Name}
+
+    result = run_freecad_transaction("Restore", restore_metadata)
+
+    assert result["ok"] is True
+    assert [item["name"] for item in result["document_delta"]["changed_objects"]] == [
+        "VibeCADExplodedView"
+    ]
+    before, after = (
+        result["document_delta"]["changed_objects"][0][key]
+        for key in ("before", "after")
+    )
+    assert before["vibecad_properties"]["VibeCADExplodedViewState"] == "exploded"
+    assert after["vibecad_properties"]["VibeCADExplodedViewState"] == "assembled"
+
+
+def test_native_abort_does_not_claim_success_when_properties_remain(monkeypatch) -> None:
+    doc = _Document()
+    view = SimpleNamespace(
+        Name="ManagedView",
+        Label="Managed view",
+        TypeId="App::FeaturePython",
+        State=[],
+        PropertiesList=["VibeCADState"],
+        VibeCADState="accepted",
+    )
+    doc.Objects.append(view)
+    monkeypatch.setattr(App, "ActiveDocument", doc, raising=False)
+
+    def fail_after_change() -> dict:
+        view.VibeCADState = "candidate"
+        raise RuntimeError("injected failure")
+
+    result = run_freecad_transaction("Fail", fail_after_change)
+
+    assert result["ok"] is False
+    assert result["rollback_attempted"] is True
+    assert result["rollback_succeeded"] is False
+    assert result["failure_code"] == "TRANSACTION_ROLLBACK_FAILED"
+    assert result["operation_error"] == "injected failure"
+    assert "left document changes" in result["rollback_error"]
+    assert result["document_delta"]["changed_objects"]
+
+
+def test_compensating_rollback_is_verified_against_snapshot(monkeypatch) -> None:
+    doc = _Document()
+    view = SimpleNamespace(
+        Name="ManagedView",
+        Label="Managed view",
+        TypeId="App::FeaturePython",
+        State=[],
+        PropertiesList=["VibeCADState"],
+        VibeCADState="accepted",
+    )
+    doc.Objects.append(view)
+    monkeypatch.setattr(App, "ActiveDocument", doc, raising=False)
+
+    def fail_after_change() -> dict:
+        view.VibeCADState = "candidate"
+        raise RuntimeError("injected failure")
+
+    result = run_freecad_transaction(
+        "Fail safely",
+        fail_after_change,
+        rollback_handler=lambda: setattr(view, "VibeCADState", "accepted"),
+    )
+
+    assert result["ok"] is False
+    assert result["rollback_attempted"] is True
+    assert result["rollback_succeeded"] is True
+    assert result["rollback_error"] is None
+    assert result["document_delta"]["changed_objects"] == []
+
+
+def test_compensation_runs_after_native_abort_raises(monkeypatch) -> None:
+    doc = _Document()
+    view = SimpleNamespace(
+        Name="ManagedView",
+        Label="Managed view",
+        TypeId="App::FeaturePython",
+        State=[],
+        PropertiesList=["VibeCADState"],
+        VibeCADState="accepted",
+    )
+    doc.Objects.append(view)
+    monkeypatch.setattr(App, "ActiveDocument", doc, raising=False)
+
+    def abort_failure() -> None:
+        doc.log.append("abort")
+        raise RuntimeError("native abort failed")
+
+    monkeypatch.setattr(doc, "abortTransaction", abort_failure)
+
+    def fail_after_change() -> dict:
+        view.VibeCADState = "candidate"
+        raise RuntimeError("candidate failed")
+
+    result = run_freecad_transaction(
+        "Fail safely",
+        fail_after_change,
+        rollback_handler=lambda: setattr(view, "VibeCADState", "accepted"),
+    )
+
+    assert result["ok"] is False
+    assert result["rollback_attempted"] is True
+    assert result["rollback_succeeded"] is False
+    assert result["failure_code"] == "TRANSACTION_ROLLBACK_FAILED"
+    assert result["operation_error"] == "candidate failed"
+    assert result["rollback_error"] == "native abort failed"
+    assert result["document_delta"]["changed_objects"] == []
+
+
+def test_active_document_switch_cannot_redirect_transaction_state(monkeypatch) -> None:
+    original = _Document()
+    original.Name = "OriginalDocument"
+    other = _Document()
+    other.Name = "OtherDocument"
+    other.Objects.append(
+        SimpleNamespace(
+            Name="OtherMarker",
+            Label="Other marker",
+            TypeId="App::Feature",
+            State=[],
+        )
+    )
+    monkeypatch.setattr(App, "ActiveDocument", original, raising=False)
+
+    def switch_after_mutation() -> dict:
+        result = _add(original, "CandidateFeature")
+        App.ActiveDocument = other
+        return result
+
+    result = run_freecad_transaction("Pinned document", switch_after_mutation)
+
+    assert result["ok"] is False
+    assert result["failure_code"] == "NATIVE_OPERATION_FAILED"
+    assert "active CAD document changed" in result["operation_error"]
+    assert result["rollback_attempted"] is True
+    assert result["rollback_succeeded"] is True
+    assert [
+        item["name"]
+        for item in result["candidate_document_delta"]["created_objects"]
+    ] == ["CandidateFeature"]
+    assert result["document_delta"]["created_objects"] == []
+    assert original.Objects == []
+    assert [obj.Name for obj in other.Objects] == ["OtherMarker"]
+    assert original.log[-1] == "abort"

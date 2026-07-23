@@ -144,7 +144,8 @@ def test_external_script_engines_are_partdesign_only(engine: str) -> None:
 
 def test_mixed_and_cross_domain_surfaces_are_rejected() -> None:
     part = resolve_modeling_surface("PartWorkbench", "vibescript")
-    native_part_tool = WORKBENCH_TOOL_PACKS["PartWorkbench"].tool_names[0]
+    native_part_tool = "project.import_step"
+    assert native_part_tool in WORKBENCH_TOOL_PACKS["PartWorkbench"].tool_names
     with pytest.raises(ValueError, match="cannot contain native"):
         validate_surface_names(
             workbench="PartWorkbench",

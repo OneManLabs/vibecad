@@ -2111,6 +2111,14 @@ def execute_candidate(
             "VibeScript domain execution exceeded its memory limit.",
             observed=process,
         )
+    if process.get("output_exceeded"):
+        return _failure(
+            str(prepared["tool_name"]),
+            "DOMAIN_OUTPUT_LIMIT_EXCEEDED",
+            "external_process",
+            "VibeScript domain execution exceeded its output limit.",
+            observed=process,
+        )
     result_path = Path(str(prepared["staging"])) / "result.json"
     if not result_path.is_file():
         return _failure(

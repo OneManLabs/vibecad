@@ -148,3 +148,57 @@ foreach (exe ${TestExecutables})
         gtest_discover_tests(${exe} DISCOVERY_TIMEOUT 30)
     endif()
 endforeach()
+
+# Keep the native VibeCAD acceptance path in the standard CTest inventory.
+add_test(
+    NAME VibeCADExplodedView_Headless
+    COMMAND $<TARGET_FILE:FreeCADMainCmd> -t TestVibeCADExplodedView
+)
+set_tests_properties(
+    VibeCADExplodedView_Headless
+    PROPERTIES
+        LABELS "VibeCAD;Native;Assembly"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+if(WIN32)
+    set_tests_properties(
+        VibeCADExplodedView_Headless
+        PROPERTIES ENVIRONMENT_MODIFICATION "${_test_env_mod}"
+    )
+endif()
+
+add_test(
+    NAME VibeCADStepImport_Headless
+    COMMAND $<TARGET_FILE:FreeCADMainCmd> -t TestVibeCADStepImport
+)
+set_tests_properties(
+    VibeCADStepImport_Headless
+    PROPERTIES
+        LABELS "VibeCAD;Native;Import;Acceptance"
+        TIMEOUT 240
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+if(WIN32)
+    set_tests_properties(
+        VibeCADStepImport_Headless
+        PROPERTIES ENVIRONMENT_MODIFICATION "${_test_env_mod}"
+    )
+endif()
+
+add_test(
+    NAME VibeCADLiveGeometryValidators_Headless
+    COMMAND $<TARGET_FILE:FreeCADMainCmd> -t TestVibeCADLiveGeometryValidators
+)
+set_tests_properties(
+    VibeCADLiveGeometryValidators_Headless
+    PROPERTIES
+        LABELS "VibeCAD;Native;Benchmark"
+        TIMEOUT 60
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+if(WIN32)
+    set_tests_properties(
+        VibeCADLiveGeometryValidators_Headless
+        PROPERTIES ENVIRONMENT_MODIFICATION "${_test_env_mod}"
+    )
+endif()

@@ -12,7 +12,7 @@ import re
 import shutil
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 import uuid
 
 from VibeCADAuth import (
@@ -55,6 +55,7 @@ MAX_PROVIDER_SELECTION_BYTES = 4096
 MAX_PROVIDER_SELECTION_ITEMS = 32
 MAX_PROVIDER_SELECTION_SUBELEMENTS = 64
 MAX_PROVIDER_SELECTION_FIELD_CHARS = 1024
+MAX_PROVIDER_IMPORT_ASSETS = 12
 REFERENCE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 MAX_REFERENCE_IMAGES = 6
 REFERENCE_IMAGE_MAX_EDGE = 1568
@@ -4040,6 +4041,68 @@ class VibeCADService:
         )
         return item
 
+    @staticmethod
+    def _assembly_exploded_view_summaries(assembly: Any) -> list[dict[str, Any]]:
+        """Expose bounded native exploded-view provenance to core.inspect."""
+        from VibeCADAssemblyExplodedView import (
+            MANAGED_VIEW_PROPERTY,
+            load_view_metadata,
+        )
+
+        summaries: list[dict[str, Any]] = []
+        for group in list(getattr(assembly, "Group", []) or []):
+            if str(getattr(group, "TypeId", "")) != "Assembly::ViewGroup":
+                continue
+            for view in list(getattr(group, "Group", []) or []):
+                if (
+                    getattr(view, MANAGED_VIEW_PROPERTY, None) is not True
+                    and not str(getattr(view, "Name", "")).startswith(
+                        "VibeCADExplodedView"
+                    )
+                ):
+                    continue
+                loaded = load_view_metadata(view)
+                metadata = dict(loaded.get("metadata") or {})
+                summaries.append(
+                    {
+                        "name": getattr(view, "Name", None),
+                        "label": getattr(view, "Label", None),
+                        "view_group": getattr(group, "Name", None),
+                        "metadata_valid": loaded.get("ok") is True,
+                        "metadata_errors": list(loaded.get("errors") or []),
+                        "configuration_id": metadata.get("configuration_id"),
+                        "generation": metadata.get("generation"),
+                        "state": metadata.get("state"),
+                        "state_meaning": (
+                            "The native exploded-view graph is available. Accepted "
+                            "component placements remain assembled."
+                            if metadata.get("state") == "exploded"
+                            else "Accepted component placements match the stored assembled state."
+                            if metadata.get("state") == "assembled"
+                            else None
+                        ),
+                        "content_sha256": metadata.get("content_sha256"),
+                        "components": [
+                            {
+                                "component_name": item.get("component_name"),
+                                "linked_object_name": item.get("linked_object_name"),
+                                "step_name": item.get("step_name"),
+                                "direction": item.get("direction"),
+                                "distance_mm": item.get("distance_mm"),
+                                "assembled_placement": item.get(
+                                    "assembled_placement"
+                                ),
+                                "exploded_placement": item.get(
+                                    "exploded_placement"
+                                ),
+                            }
+                            for item in list(metadata.get("components") or [])[:64]
+                            if isinstance(item, dict)
+                        ],
+                    }
+                )
+        return summaries[:8]
+
     def _assembly_summary(self, assembly: Any) -> dict[str, Any]:
         item = self._object_summary(assembly)
         item["type_property"] = getattr(assembly, "Type", None)
@@ -4050,6 +4113,7 @@ class VibeCADService:
             self._joint_summary(joint)
             for joint in self._assembly_joint_objects(assembly)[:40]
         ]
+        item["exploded_views"] = self._assembly_exploded_view_summaries(assembly)
         item["children"] = [
             self._object_summary(child)
             for child in list(getattr(assembly, "Group", []) or [])[:40]
@@ -4160,6 +4224,101 @@ class VibeCADService:
 
     def project_context(self) -> dict[str, Any]:
         return self._project_store.context()
+
+    def provider_registered_import_assets(
+        self,
+        *,
+        scope: dict[str, Any] | None = None,
+        cancellation_check: Callable[[], bool] | None = None,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """Return a bounded, path-free list of authenticated STEP assets."""
+
+        from VibeCADImportAssets import (
+            import_asset_store_supported,
+            registered_import_assets,
+        )
+
+        captured_scope = (
+            dict(scope) if isinstance(scope, dict) else self.project_scope_snapshot()
+        )
+        project_root = str(captured_scope.get("root") or "").strip()
+        project_id = str(captured_scope.get("project_id") or "").strip()
+        if not import_asset_store_supported():
+            return {
+                "schema": "vibecad-project-import-assets-context-v1",
+                "version": 1,
+                "project_id": project_id,
+                "asset_count": 0,
+                "listed_asset_count": 0,
+                "assets_omitted": 0,
+                "asset_context_limit": MAX_PROVIDER_IMPORT_ASSETS,
+                "supported_formats": [],
+                "store_status": "unavailable",
+                "unavailable_reason": "secure_file_identity_is_not_supported",
+                "assets": [],
+            }
+        if not project_root or not project_id:
+            return {
+                "schema": "vibecad-project-import-assets-context-v1",
+                "version": 1,
+                "project_id": project_id,
+                "asset_count": 0,
+                "listed_asset_count": 0,
+                "assets_omitted": 0,
+                "asset_context_limit": MAX_PROVIDER_IMPORT_ASSETS,
+                "supported_formats": ["step"],
+                "assets": [],
+            }
+
+        summary = registered_import_assets(
+            project_root,
+            project_id,
+            limit=MAX_PROVIDER_IMPORT_ASSETS,
+            cancellation_check=cancellation_check,
+            progress_callback=progress_callback,
+        )
+        raw_assets = [
+            item for item in summary.get("assets", []) if isinstance(item, dict)
+        ]
+        selected_assets = raw_assets[-MAX_PROVIDER_IMPORT_ASSETS:]
+        safe_fields = (
+            "schema",
+            "version",
+            "asset_id",
+            "stored_name",
+            "format",
+            "size_bytes",
+            "sha256",
+            "created_at",
+            "project_id",
+            "availability",
+        )
+        provider_assets = []
+        for item in selected_assets:
+            provider_asset = {key: item[key] for key in safe_fields if key in item}
+            availability = str(item.get("availability") or "not_verified")
+            if availability not in {
+                "verified",
+                "changed",
+                "missing",
+                "not_verified",
+            }:
+                availability = "not_verified"
+            provider_asset["availability"] = availability
+            provider_assets.append(provider_asset)
+        asset_count = int(summary.get("asset_count") or len(raw_assets))
+        return {
+            "schema": "vibecad-project-import-assets-context-v1",
+            "version": 1,
+            "project_id": project_id,
+            "asset_count": asset_count,
+            "listed_asset_count": len(provider_assets),
+            "assets_omitted": max(0, asset_count - len(provider_assets)),
+            "asset_context_limit": MAX_PROVIDER_IMPORT_ASSETS,
+            "supported_formats": ["step"],
+            "assets": provider_assets,
+        }
 
     def revision_timeline(self) -> list[dict[str, Any]]:
         return self._project_store.revision_timeline()
@@ -5557,7 +5716,11 @@ class VibeCADService:
         )
         return context
 
-    def provider_context_summary(self) -> dict[str, Any]:
+    def provider_context_summary(
+        self,
+        *,
+        include_registered_import_assets: bool = True,
+    ) -> dict[str, Any]:
         """Return only deterministic turn-start facts needed by the model.
 
         Broad workbench summaries remain available to explicit UI and debugger
@@ -5588,7 +5751,7 @@ class VibeCADService:
             )
             if key in brief
         }
-        return {
+        context = {
             "workbench": active_workbench,
             "modeling_surface": surface,
             "capability_route": self.last_capability_route(),
@@ -5598,6 +5761,18 @@ class VibeCADService:
             "reference_images": self.pending_reference_image_attachments(),
             "design_brief": provider_brief,
         }
+        if include_registered_import_assets:
+            context["registered_import_assets"] = (
+                self.provider_registered_import_assets()
+            )
+        return context
+
+    def provider_context_summary_without_import_assets(self) -> dict[str, Any]:
+        """Capture document facts without project-asset file authentication."""
+
+        return self.provider_context_summary(
+            include_registered_import_assets=False
+        )
 
     def _register_core_tools(self) -> None:
         service_tools.register_tools(self._registry, self)

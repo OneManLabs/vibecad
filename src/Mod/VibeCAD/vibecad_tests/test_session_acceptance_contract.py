@@ -27,8 +27,12 @@ def _run_candidate_decision_turn(
         "events": [],
         "records": [],
     }
+    document_dispatch = {"active": False}
 
-    class Service:
+    class Service(session.VibeCADService):
+        def __init__(self):
+            pass
+
         @staticmethod
         def authorize(permission):
             assert permission == "ai.use"
@@ -63,6 +67,29 @@ def _run_candidate_decision_turn(
         @staticmethod
         def design_brief():
             return {"revision": "brief-revision"}
+
+        @staticmethod
+        def provider_registered_import_assets(
+            *, scope, cancellation_check, progress_callback
+        ):
+            assert document_dispatch["active"] is False
+            assert cancellation_check is cancellation_check_value
+            assert progress_callback is progress_callback_value
+            observed["import_asset_load_count"] = int(
+                observed.get("import_asset_load_count", 0)
+            ) + 1
+            observed["import_asset_scope"] = dict(scope)
+            return {
+                "schema": "vibecad-project-import-assets-context-v1",
+                "version": 1,
+                "project_id": scope["project_id"],
+                "asset_count": 0,
+                "listed_asset_count": 0,
+                "assets_omitted": 0,
+                "asset_context_limit": 12,
+                "supported_formats": ["step"],
+                "assets": [],
+            }
 
     prepared = SimpleNamespace(
         acceptance_id="acceptance-1",
@@ -126,6 +153,11 @@ def _run_candidate_decision_turn(
         model = "deterministic-test"
 
     def tool_runner(_service, **kwargs):
+        capability = kwargs["_prepared_mutation_capability"]
+        assert session._prepared_mutation_capability_is_active(
+            capability, _service
+        )
+        observed["mutation_capability"] = capability
         kwargs["tool_trace"].extend(
             [
                 {
@@ -156,7 +188,10 @@ def _run_candidate_decision_turn(
     monkeypatch.setattr(
         session,
         "_context_for_provider",
-        lambda *_args: {"workbench": "PartDesignWorkbench", "provider_tool_schemas": []},
+        lambda *_args, **_kwargs: {
+            "workbench": "PartDesignWorkbench",
+            "provider_tool_schemas": [],
+        },
     )
     monkeypatch.setattr(
         session,
@@ -177,6 +212,17 @@ def _run_candidate_decision_turn(
     def progress(event):
         observed["events"].append(dict(event))
 
+    cancellation_check_value = cancellation_check
+    progress_callback_value = progress
+
+    def dispatch(operation):
+        assert document_dispatch["active"] is False
+        document_dispatch["active"] = True
+        try:
+            return operation()
+        finally:
+            document_dispatch["active"] = False
+
     decision_callback = None
     if candidate_decision_callback is not None:
         def decision_callback(payload):
@@ -190,6 +236,7 @@ def _run_candidate_decision_turn(
         progress_callback=progress,
         cancellation_check=cancellation_check,
         candidate_decision_callback=decision_callback,
+        document_thread_dispatch=dispatch,
     )
     return observed, response
 
@@ -207,6 +254,29 @@ def test_candidate_decision_contract_is_exact_and_defaults_to_automatic() -> Non
     )
     with pytest.raises(ValueError, match="exactly 'accept' or 'reject'"):
         _candidate_decision(lambda review: "ACCEPT", payload)
+
+
+def test_prepared_mutation_capability_is_exact_scoped_and_revocable() -> None:
+    service = object()
+    capability = session._issue_prepared_mutation_capability(
+        service, SimpleNamespace(acceptance_id="acceptance-capability")
+    )
+
+    assert session._prepared_mutation_capability_is_active(capability, service)
+    assert not session._prepared_mutation_capability_is_active(capability, object())
+
+    class Forged(type(capability)):
+        pass
+
+    forged = object.__new__(Forged)
+    forged._active = True
+    forged._acceptance_id = "acceptance-capability"
+    forged._seal = session._PREPARED_MUTATION_CAPABILITY_SEAL
+    forged._service = service
+    assert not session._prepared_mutation_capability_is_active(forged, service)
+
+    session._revoke_prepared_mutation_capability(capability)
+    assert not session._prepared_mutation_capability_is_active(capability, service)
 
 
 def test_run_state_event_contract_is_stable() -> None:
@@ -248,6 +318,7 @@ def test_human_candidate_acceptance_occurs_after_validation(monkeypatch) -> None
         }
     ]
     assert observed["records"][0]["rollback"]["acceptance_mode"] == "human"
+    assert observed["import_asset_load_count"] == 1
     assert response.context["candidate_decision"] == {
         "decision": "accept",
         "mode": "human",
@@ -262,6 +333,10 @@ def test_headless_candidate_acceptance_is_explicitly_automatic(monkeypatch) -> N
     assert observed["calls"] == ["validate", ("accept", "automatic")]
     assert observed["records"][0]["rollback"]["acceptance_mode"] == "automatic"
     assert response.context["candidate_decision"]["mode"] == "automatic"
+    capability = observed["mutation_capability"]
+    assert not session._prepared_mutation_capability_is_active(
+        capability, capability._service
+    )
 
 
 def test_human_rejection_does_not_accept_a_revision(monkeypatch) -> None:
@@ -353,7 +428,13 @@ def test_changed_object_extraction_ignores_boolean_state_flags() -> None:
                 "created_objects": [{"name": "Body"}],
                 "changed_objects": [{"before": {"name": "Sketch"}, "after": {"name": "Sketch"}}],
             },
-            "document_delta": {"deleted_objects": [{"name": "OldFeature"}]},
+            "document_delta": {
+                "created_objects": [{"name": "Body"}],
+                "changed_objects": [
+                    {"before": {"name": "Sketch"}, "after": {"name": "Sketch"}}
+                ],
+                "deleted_objects": [{"name": "OldFeature"}],
+            },
         }
     }]
     assert _changed_objects(traces) == [

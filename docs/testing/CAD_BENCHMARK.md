@@ -18,6 +18,14 @@ The 2026-07-22 Apple Silicon transactional baseline passed 3 of 3 series trials.
 
 The baseline now covers all seven Tier 1 prompt classes: exact box, centered hole, rounded edges, hollow enclosure, dimension change, mirrored feature, and STL export. Each of the three repeated series trials passed all class checks with 42 typed tool calls, six accepted revisions, three reopened FCStd documents, and one verified STL artifact. This is a complete deterministic-provider transaction baseline, not a live-model score.
 
+The Tier 1 live runner is in progress. It must bind the exact source SHA, copied
+runtime, provider, model, and a fresh readiness result before it sends a prompt.
+It retains one complete record for each of the seven case attempts. A separate
+content-bound rating file supplies the human instruction-adherence results.
+Adversarial hardening is still in progress. The runner has not sent a live
+benchmark prompt, and no human-rated Tier 1 score exists. The 95 percent Tier 1
+live-model target is not complete.
+
 The Tier 2 transactional suite has ten functional-part cases. Run `tools/run_tier2_provider_benchmark.py --trials 3`. The wall-bracket case creates one fully editable native L-profile, a 30 mm pad, and two 4 mm through mounting holes. The motor-adapter case creates an 80 mm disc with a 20 mm shaft bore and four equal 5 mm holes on a 60 mm pitch circle. The battery-tray case creates a 100 by 60 by 20 mm open shell with 2.5 mm walls and four symmetric bottom mounts. The camera-mount case creates a plate with a center clearance hole and two constrained adjustment slots. The pipe-clamp case creates an annular clamp with a radial split and two through mounts. The ventilated-cover case creates five constrained through-slots in a thin plate. The electronics-enclosure case creates two separate editable bodies: an open housing and a removable M3 lid.
 
 The flanged-coupling case creates one 80 mm flange and one 40 mm hub. It has a 20 mm through-bore and four 6 mm holes on a 60 mm pitch circle. The simple-hinge case creates four separate editable bodies. It has two 40 by 30 by 3 mm leaves, one 8 mm barrel with a 6 mm bore, and one 5 mm pin. The bolt-pattern-plate case creates one 100 by 80 by 8 mm plate. It has a 20 mm center bore and eight 6 mm holes on a 60 mm pitch circle.
@@ -27,3 +35,25 @@ Each Tier 2 case uses typed provider tools and native parametric features. Each 
 The 2026-07-22 Apple Silicon ten-case expansion passed its required fresh round. It passed 10 of 10 case attempts with 187 typed calls, ten accepted revisions, and ten reopened documents. The three new cases each passed exact volume, topology, editability, revision, and reopen checks. The live pre-save circular bound can differ from the exact constrained diameter by up to 0.016 mm. Therefore, a transient circular bound can use a 0.02 mm tolerance. The reopened dimensions, analytic volume, and topology must still pass. The clamp Y bound uses the analytic result after its split removes the outer circle's top point.
 
 The executor is deterministic and `live_model_score` is false. This run does not measure live-model intent extraction or tool selection. It does not satisfy the 85 percent conversational Tier 2 target.
+
+The Tier 3 deterministic evidence now includes one content-bound STEP import and
+native follow-up edit. A human or platform adapter registers the STEP asset. The
+provider uses only its opaque ID. The case rejects malformed and truncated input,
+validates solid geometry in an isolated worker, creates one static native
+`Part::Feature`, and adds a linked native cylinder and `Part::Cut`. It checks
+exact 40 by 30 by 10 mm bounds, save, close, reopen, recompute, accepted revision,
+compare, STEP and STL export, and parent restore. The registered
+`VibeCADStepImport_Headless` CTest passed 1 of 1 in 7.66 seconds. The result uses
+the version-2 case-attempt contract and sets `live_model_score` to false. It does
+not measure live-model intent extraction or human instruction adherence.
+
+Tier 3 deterministic native evidence also includes one accepted assembly
+exploded-view create and restore workflow. The configuration is native,
+content-bound, translation-only, and limited to one managed configuration for
+each assembly. A failed restore proves snapshot-verified compensating rollback.
+An injected create failure after assembly provenance leaves no created or changed
+object.
+
+The headless native CTest passed 1 of 1 in 6.71 seconds. The GUI unittest reported
+`OK`; the FreeCAD process then had the known code-134 shutdown fault. This is
+native transaction evidence, not a live-model score.

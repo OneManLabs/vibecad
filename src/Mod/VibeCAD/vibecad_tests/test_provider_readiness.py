@@ -7,7 +7,63 @@ from pathlib import Path
 import subprocess
 from types import SimpleNamespace
 
-from tools.probe_provider_readiness import run_probe
+import pytest
+
+from tools.probe_provider_readiness import (
+    CREDENTIAL_FINGERPRINT_ALGORITHM,
+    canonical_provider_endpoint,
+    credential_fingerprint,
+    endpoint_identity_digest,
+    readiness_execution_identity_matches,
+    run_probe,
+)
+
+
+_TEST_CREDENTIAL = "test-provider-key-with-high-entropy-placeholder"
+
+
+def _ready_child_result(
+    binding_nonce: str,
+    *,
+    provider: str = "openai",
+    model: str = "model",
+    auth_source: str = "OS keyring",
+    base_url: str | None = None,
+    credential: str = _TEST_CREDENTIAL,
+) -> dict[str, object]:
+    endpoint = canonical_provider_endpoint(provider, base_url)
+    fingerprint = (
+        "a" * 64
+        if auth_source == "environment"
+        else credential_fingerprint(
+            provider=provider,
+            auth_source=auth_source,
+            binding_nonce=binding_nonce,
+            credential=credential,
+        )
+    )
+    return {
+        "schema": "vibecad-provider-readiness-v1",
+        "version": 1,
+        "created_at": "2026-07-22T12:00:00Z",
+        "can_call_provider": True,
+        "prompt_sent": False,
+        "document_data_sent": False,
+        "credential_validation_performed": True,
+        "model_validation_performed": True,
+        "model_available": True,
+        "stage": "complete",
+        "provider": provider,
+        "model": model,
+        "auth_status": "verified",
+        "auth_source": auth_source,
+        "online_by_default": True,
+        "endpoint_identity": endpoint,
+        "endpoint_sha256": endpoint_identity_digest(endpoint),
+        "credential_binding_nonce": binding_nonce,
+        "credential_fingerprint_algorithm": CREDENTIAL_FINGERPRINT_ALGORITHM,
+        "credential_fingerprint": fingerprint,
+    }
 
 
 def test_timeout_before_result_fails_closed_without_data_claim(tmp_path) -> None:
@@ -21,20 +77,86 @@ def test_timeout_before_result_fails_closed_without_data_claim(tmp_path) -> None
     assert result["document_data_sent"] is False
 
 
-def test_fresh_completed_result_can_authorize_live_benchmark(tmp_path) -> None:
+def test_verified_opt_in_result_can_authorize_live_benchmark(tmp_path) -> None:
     output = tmp_path / "result.json"
 
     def runner(command, **kwargs):
-        output.write_text(json.dumps({
-            "schema": "vibecad-provider-readiness-v1", "version": 1,
-            "can_call_provider": True, "prompt_sent": False,
-            "document_data_sent": False, "provider": "openai", "model": "model",
-        }), encoding="utf-8")
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        output.write_text(
+            json.dumps(_ready_child_result(nonce)), encoding="utf-8"
+        )
         return SimpleNamespace(returncode=0)
 
-    result = run_probe(Path("FreeCADCmd"), Path("child.py"), output, 1, runner=runner)
+    result = run_probe(
+        Path("FreeCADCmd"), Path("child.py"), output, 1,
+        validate_credentials=True, runner=runner,
+    )
     assert result["ready_for_live_benchmark"] is True
     assert result["process_timed_out"] is False
+    assert set(result) == set(_ready_child_result(result["credential_binding_nonce"])) | {
+        "process_timed_out",
+        "process_exit_code",
+        "ready_for_live_benchmark",
+    }
+
+
+def test_unverified_credential_is_not_live_ready(tmp_path) -> None:
+    output = tmp_path / "result.json"
+
+    def runner(command, **kwargs):
+        assert kwargs["env"]["VIBECAD_PROVIDER_VALIDATE_CREDENTIALS"] == "0"
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        result = _ready_child_result(nonce)
+        result.update({
+            "auth_status": "configured_unverified",
+            "credential_validation_performed": False,
+            "model_validation_performed": False,
+            "model_available": False,
+        })
+        output.write_text(json.dumps(result), encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    result = run_probe(
+        Path("FreeCADCmd"), Path("child.py"), output, 1, runner=runner,
+    )
+    assert result["ready_for_live_benchmark"] is False
+
+
+def test_ambient_environment_credential_is_not_live_ready(tmp_path) -> None:
+    output = tmp_path / "result.json"
+
+    def runner(command, **kwargs):
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        output.write_text(
+            json.dumps(
+                _ready_child_result(nonce, auth_source="environment")
+            ),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0)
+
+    result = run_probe(
+        Path("FreeCADCmd"), Path("child.py"), output, 1,
+        validate_credentials=True, runner=runner,
+    )
+    assert result["ready_for_live_benchmark"] is False
+
+
+def test_selected_model_must_be_present_in_bounded_discovery(tmp_path) -> None:
+    output = tmp_path / "result.json"
+
+    def runner(command, **kwargs):
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        result = _ready_child_result(nonce, model="missing")
+        result["model_available"] = False
+        output.write_text(json.dumps(result), encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    result = run_probe(
+        Path("FreeCADCmd"), Path("child.py"), output, 1,
+        validate_credentials=True, runner=runner,
+    )
+    assert result["ready_for_live_benchmark"] is False
 
 
 def test_stale_result_is_deleted_before_failed_probe(tmp_path) -> None:
@@ -47,3 +169,146 @@ def test_stale_result_is_deleted_before_failed_probe(tmp_path) -> None:
     result = run_probe(Path("FreeCADCmd"), Path("child.py"), output, 1, runner=runner)
     assert result["ready_for_live_benchmark"] is False
     assert result["process_exit_code"] == 9
+
+
+def test_endpoint_change_breaks_execution_binding() -> None:
+    nonce = "12" * 32
+    report = _ready_child_result(
+        nonce, base_url="https://gateway.example.test/v1"
+    )
+    assert readiness_execution_identity_matches(
+        report,
+        provider="openai",
+        base_url="https://gateway.example.test/v1/",
+        auth_source="OS keyring",
+        credential=_TEST_CREDENTIAL,
+    )
+    assert not readiness_execution_identity_matches(
+        report,
+        provider="openai",
+        base_url="https://other.example.test/v1",
+        auth_source="OS keyring",
+        credential=_TEST_CREDENTIAL,
+    )
+
+
+def test_credential_change_breaks_execution_binding() -> None:
+    nonce = "34" * 32
+    report = _ready_child_result(nonce)
+    assert readiness_execution_identity_matches(
+        report,
+        provider="openai",
+        base_url=None,
+        auth_source="OS keyring",
+        credential=_TEST_CREDENTIAL,
+    )
+    assert not readiness_execution_identity_matches(
+        report,
+        provider="openai",
+        base_url=None,
+        auth_source="OS keyring",
+        credential="different-provider-key",
+    )
+
+
+def test_chatgpt_account_change_breaks_execution_binding_without_identifier_output() -> None:
+    nonce = "56" * 32
+    account = {
+        "type": "chatgpt",
+        "accountId": "acct_7f68b3d8f1b24a64a0c7614f39487e83",
+    }
+    endpoint = canonical_provider_endpoint("chatgpt", None)
+    report = {
+        **_ready_child_result(nonce),
+        "provider": "chatgpt",
+        "auth_source": "Codex credential store",
+        "endpoint_identity": endpoint,
+        "endpoint_sha256": endpoint_identity_digest(endpoint),
+        "credential_fingerprint": credential_fingerprint(
+            provider="chatgpt",
+            auth_source="Codex credential store",
+            binding_nonce=nonce,
+            chatgpt_account=account,
+        ),
+    }
+    assert account["accountId"] not in json.dumps(report)
+    assert readiness_execution_identity_matches(
+        report,
+        provider="chatgpt",
+        base_url=None,
+        auth_source="Codex credential store",
+        chatgpt_account=account,
+    )
+    assert not readiness_execution_identity_matches(
+        report,
+        provider="chatgpt",
+        base_url=None,
+        auth_source="Codex credential store",
+        chatgpt_account={
+            "type": "chatgpt",
+            "accountId": "acct_062b303b91d546bc903f7efcdacaa6f6",
+        },
+    )
+
+
+def test_email_only_chatgpt_account_cannot_create_execution_binding() -> None:
+    with pytest.raises(ValueError, match="high-entropy opaque"):
+        credential_fingerprint(
+            provider="chatgpt",
+            auth_source="Codex credential store",
+            binding_nonce="78" * 32,
+            chatgpt_account={
+                "type": "chatgpt",
+                "email": "designer@example.test",
+            },
+        )
+
+
+def test_readiness_fingerprint_does_not_disclose_credential(tmp_path) -> None:
+    output = tmp_path / "result.json"
+
+    def runner(command, **kwargs):
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        output.write_text(
+            json.dumps(_ready_child_result(nonce)), encoding="utf-8"
+        )
+        return SimpleNamespace(returncode=0)
+
+    result = run_probe(
+        Path("FreeCADCmd"),
+        Path("child.py"),
+        output,
+        1,
+        validate_credentials=True,
+        runner=runner,
+    )
+    assert _TEST_CREDENTIAL not in json.dumps(result)
+    assert result["credential_fingerprint"] != _TEST_CREDENTIAL
+
+
+def test_unknown_ready_field_fails_closed(tmp_path) -> None:
+    output = tmp_path / "result.json"
+
+    def runner(command, **kwargs):
+        nonce = kwargs["env"]["VIBECAD_PROVIDER_CREDENTIAL_BINDING_NONCE"]
+        result = _ready_child_result(nonce)
+        result["unexpected"] = True
+        output.write_text(json.dumps(result), encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    result = run_probe(
+        Path("FreeCADCmd"),
+        Path("child.py"),
+        output,
+        1,
+        validate_credentials=True,
+        runner=runner,
+    )
+    assert result["ready_for_live_benchmark"] is False
+
+
+def test_endpoint_with_embedded_secret_is_rejected() -> None:
+    with pytest.raises(ValueError, match="user information"):
+        canonical_provider_endpoint(
+            "openai", "https://secret@example.test/v1"
+        )

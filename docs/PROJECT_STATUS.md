@@ -1,7 +1,7 @@
 # Project Status
 
-Last update: 2026-07-22. Active work: Phase 1 packaging, Phase 4 benchmark
-acceptance, and Phase 7 release hardening.
+Last update: 2026-07-22. Active work: Phase 1 packaging, Phase 4 live benchmark
+hardening, Phase 7 release hardening, and Phase 8 portability evidence.
 
 ## Completed
 
@@ -239,7 +239,7 @@ acceptance, and Phase 7 release hardening.
 - Tier 2 pipe-clamp case: passed 3 of 3 repeated provider transaction trials. It creates a 40 mm bore, 60 mm outside ring, 4 mm radial split, and two 5 mm through mounts. The five-case suite uses 68 typed calls, accepts five revisions, and reopens five valid parametric documents per trial.
 - Tier 2 ventilated-cover case: passed 3 of 3 repeated provider transaction trials. It creates an 80 by 50 by 3 mm cover with five constrained through-slots. The six-case suite accepts six revisions and reopens six valid parametric documents per trial.
 - Tier 2 electronics-enclosure case: passed 3 of 3 repeated provider transaction trials. It creates a 120 by 80 by 35 mm open housing with 2.5 mm walls and a separate 3 mm lid body with four constrained 3.2 mm M3 clearance holes. The seven-case suite uses 103 typed calls, accepts seven revisions, and reopens seven valid native documents per trial.
-- Bounded live-provider readiness: macOS credential reads now use a noninteractive `/usr/bin/security` process with a five-second limit. Nine focused authentication and preflight tests pass. The built `FreeCADCmd` probe completed in 6.0 seconds with `process_timed_out: false`, `stage: complete`, and no prompt or document data sent. The configured OpenAI credential resolved as invalid, so live-model benchmark calls remain disabled.
+- Bounded live-provider readiness: macOS credential reads now use a noninteractive `/usr/bin/security` process with a five-second limit. Nine focused authentication and preflight tests pass. One earlier built `FreeCADCmd` probe completed in 6.0 seconds with `process_timed_out: false`, `stage: complete`, and no prompt or document data sent. That probe recorded an invalid credential. It is historical evidence and is not a statement about the current credential state. The new Tier 1 live runner is under adversarial hardening. No live benchmark prompt has been sent, and no human-rated live score exists.
 - Post-Keychain regression gate: the complete VibeCAD Python suite passed 606 tests with 5 skips in 7.30 seconds. The complete CTest registry contained 1,687 tests; all 1,680 enabled tests passed in 40.11 seconds, 3 platform tests skipped, and 7 upstream tests remained explicitly disabled. No CTest failed.
 - Revision report and branch unit: added non-overwriting, content-bound JSON revision reports and exact FCStd branch copies with versioned lineage records. A branch gets a new project identity and migrates the accepted design brief, intent memory, design document, source settings, and current conversation history. Source CAD and project snapshot integrity are checked. Unsafe snapshot links are rejected. A project migration failure removes all new branch artifacts. Export and branch actions enforce RBAC and emit redacted audit events. The revision panel now has accessible Report and Branch controls. Seventeen focused contract tests passed, the full Python suite passed 614 tests with 5 skips in 7.08 seconds, the built modules imported, and the real FreeCAD integration reopened and recomputed the exact branch geometry.
 - Image-assisted dimension safety: added a versioned, content-bound image-scale calibration for mm, cm, m, and inches. An uncalibrated image cannot return a numeric dimension. A calibrated pixel measurement remains an explicit estimate with a perspective and lens-distortion warning. The reference panel has an accessible Set scale control. Reference metadata writes are atomic, and a write failure restores prior in-memory state. Thirty-four focused calibration and context tests passed. The full Python suite passed 626 tests with 5 skips in 9.22 seconds, and the built modules imported.
@@ -308,8 +308,8 @@ Next milestone: Continue P1-001 artifact CI, the P4-001 case-attempt scoring
 contract, and the P7-001 security and performance gates.
 
 External blockers: Production Developer ID and notarization credentials only for
-credential-backed signing and notarization. Live-model scores require a provider
-that passes the existing readiness check.
+credential-backed signing and notarization. A provider that passes the readiness
+check is a prerequisite for a live score, not an implementation blocker.
 
 ## Phase 4 and Phase 7 progress report
 
@@ -382,15 +382,133 @@ human rating data is available.
 
 External blockers: Production Developer ID and notarization credentials are the
 only production release credential blocker. They block only credential-backed
-signing and notarization. A valid provider credential and human rating data are
-also required for live-model benchmark scores. Neither item blocks
+signing and notarization. Provider access and human rating data are prerequisites
+for a live-model score. They are not implementation blockers. They do not block
 credential-free packaging, ad-hoc signing, deterministic benchmarks, security
 scans, performance tests, or other implementation work.
 
+## Phase 5 and Phase 8 progress report
+
+Milestone: Native exploded views, content-bound STEP import, live Tier 1 runner,
+and portable shared logic.
+
+Implemented: The candidate-review acceptance boundary is complete. Validation
+keeps the canonical CAD file, accepted head, project metadata, and accepted
+project state unchanged. Accept creates one recorded revision. Reject and Stop
+restore the prior accepted state.
+
+Implemented: Typed assembly tools create and restore one native managed
+exploded-view configuration for each assembly. Each move is translation-only.
+The native graph and its content identity remain editable and inspectable. A
+failed restore uses a compensating rollback. The rollback restores its exact
+pre-call snapshot and verifies that the document has no unexpected change. An
+injected create failure after assembly provenance also runs compensating cleanup
+and leaves no created or changed object.
+
+Implemented: A human or platform adapter registers one STEP file in the project.
+The assistant panel now supplies an accessible file-selection control. File copy
+and hashing run outside the GUI thread. The provider receives only an opaque
+asset ID. The importer binds the bytes to a size and SHA-256 value and validates
+solid geometry in a bounded `FreeCADCmd` worker. On macOS, a Seatbelt profile
+denies network access, child execution, outside writes, and unrelated file
+reads. The validator checks bounded worker output through stable no-follow
+descriptors. It authenticates an open BREP descriptor. The pinned private path
+passes identity checks before and after the parser creates one detached native
+shape outside document-thread dispatch. The validator then removes all private
+pathnames. Publication consumes that shape one time, revalidates the complete
+evidence, and stores the canonical native BREP identity after recompute. It
+creates one static native `Part::Feature`. A
+downstream native cylinder and `Part::Cut` remain linked and editable. The
+accepted revision passes save, close, reopen, recompute, compare, STEP and STL
+export, and parent restore.
+
+Implemented: Each provider mutation now needs one active prepared-acceptance
+capability. The session issues it after acceptance preparation and revokes it
+after provider execution. Direct, forged, wrong-service, and revoked uses fail
+before mutation. The real `run_prompt` STEP test uses the provider runner and
+acceptance coordinator, records one human-attributed revision, and reopens the
+accepted part. STEP asset scanning is cancellable, reports path-free progress,
+and uses a bounded identity-sensitive digest cache. Worker stdout and stderr use
+a hard combined output limit.
+
+Implemented: The Tier 1 live runner and its separate human-rating path are in
+progress. The runner binds source, runtime, provider, model, and fresh readiness
+evidence. Adversarial hardening is still in progress. It has not sent a live
+benchmark prompt and has no human instruction-adherence score.
+
+Implemented: The versioned portability contract checks named portable modules,
+macOS adapter boundaries, compilation, and bounded tests. The local contract
+group passed 102 tests. The Linux and Windows workflow exists, but real CI for
+the exact source SHA is pending. The macOS release workflow also removes one
+Bash 3.2 `set -u` failure by using one nonempty verifier-argument array. Exact-SHA
+Apple Silicon CI is pending.
+
+Files changed: Exploded-view contracts, typed create and restore tools,
+document validation, native integration tests, STEP asset registration, isolated
+STEP validation, typed STEP import, the provider runner, live benchmark runner,
+portability contract and workflow, macOS workflow, and these living records.
+
+Tests added: Managed exploded-view graph and rollback tests, one native
+exploded-view integration, post-provenance create-fault cleanup, STEP registration
+and fault tests, isolated parser tests, native STEP edit and acceptance tests,
+real `run_prompt` one-revision coverage, prepared mutation capability tests,
+bounded process-output tests, cancellable and cached asset-scan tests, macOS
+Seatbelt adversarial tests, detached-parse binding and cleanup tests, live-runner
+identity and rating tests, and portability contract tests.
+
+Tests run: The exploded-view headless native CTest passed. Its GUI unittest
+reported `OK`; the FreeCAD test process then had the known code-134 shutdown
+fault. The final STEP-focused group passed 135 tests. The expanded sandbox,
+STEP, asset, session, bounded-process, context, and transaction group passed 183
+tests. The complete VibeCAD Python regression passed 1,093 tests with 5 platform
+skips in 25.57 seconds. The registered exploded-view, STEP-import, and
+live-geometry native CTest group passed 3 of 3 in 27.98 seconds. The local
+portability contract group passed 102 tests and compiled 9 modules. The complete
+1,690-test CTest inventory then passed with 1,683 enabled passes, 3 expected
+platform-condition skips, 7 registered disabled tests, and no failure in 130.35
+seconds. An earlier sequential run had isolated native crashes in
+`Vector.TestScalar`, `TopoShapeExpansionTest.resetElementMapTest`, and
+`SketchObjectTest.testDeleteExposeInternalGeometryOfParabola`. Each exact test
+then passed alone, passed 10 consecutive stress runs, and passed in the clean
+complete run. No VibeCAD test failed in either complete run.
+
+Results: P5-013 and P5-014 are complete. P4-005 and P8-001 are in progress. The
+main Tier 1 live-model target remains in progress.
+
+Benchmark impact: One deterministic Tier 3 STEP import and native edit case has
+complete accepted-revision evidence. It is not a live-model score. No Tier 1
+live prompt or human score exists.
+
+Known issues: STEP validation requires solid geometry with positive volume and
+nonempty three-axis bounds. It rejects surface-only content. It does not preserve
+a STEP assembly hierarchy. The imported source is one static `Part::Feature`; it
+does not reconstruct source sketches or feature history. The validator uses a
+separate safe-mode `FreeCADCmd` process with file, environment, time, and memory
+bounds. On macOS, a fail-closed Seatbelt profile adds file, network, write, and
+child-execution controls. A hard parent-process stop can leave a validator
+temporary directory. Detached BREP parsing runs outside document-thread
+dispatch. Native shape copy, assignment, recompute, and final identity checks
+use the document thread. Linux STEP validation fails closed until it has an
+equivalent OS sandbox. STEP attachment fails closed on Windows until a Win32 handle-relative
+asset store exists; other provider turns remain available. Exploded views
+support one managed configuration for each assembly and translation-only moves.
+Real Linux, Windows, and exact-SHA Apple Silicon CI evidence is pending. The
+FreeCAD GUI test runner still has the code-134 shutdown defect after unittest
+success.
+
+Next milestone: Complete adversarial hardening for the live Tier 1 runner. Run
+the portable contract in Linux and Windows CI. Run the credential-free Apple
+Silicon package and release gates for the exact source SHA.
+
+External blockers: Production Developer ID and notarization credentials block
+only final credential-backed signing and notarization. They do not block ad-hoc
+signing, packaging, CI, tests, or benchmark implementation.
+
 ## Exact next task
 
-Complete and test the current P4 and P7 worktree units. Commit them, then rerun
-the credential-free Apple Silicon package, source-security, dependency,
-performance, and clean-install gates for that exact commit. Keep deterministic
-and live-model benchmark rates separate by provider and model. Production signing
-and notarization remain blocked only by the acknowledged Apple credentials.
+Complete the P4-005 adversarial review. Run P8-001 on Linux and Windows. Commit
+the tested units, then rerun the credential-free Apple Silicon package,
+source-security, dependency, performance, and clean-install gates for that exact
+commit. Keep deterministic and live-model benchmark rates separate by provider
+and model. Production signing and notarization remain blocked only by the
+acknowledged Apple credentials.

@@ -390,21 +390,22 @@ jobs:
           dmg=(package/rattler-build/osx/VibeCAD-*.dmg)
           pkg=(package/rattler-build/osx/VibeCAD-*.pkg)
           evidence=(package/rattler-build/osx/VibeCAD-*-release-evidence)
-          production=()
+          verify_args=(
+            --dmg "${dmg[0]}"
+            --pkg "${pkg[0]}"
+            --evidence-dir "${evidence[0]}"
+            --expected-application-name "${EXPECTED_APPLICATION_NAME}"
+            --expected-release-version "${EXPECTED_RELEASE_VERSION}"
+            --expected-source-uri "${EXPECTED_SOURCE_URI}"
+            --expected-source-sha "${EXPECTED_SOURCE_SHA}"
+            --expected-builder-id "${EXPECTED_BUILDER_ID}"
+            --expected-build-type "${EXPECTED_BUILD_TYPE}"
+            --expected-update-channel "${EXPECTED_UPDATE_CHANNEL}"
+          )
           if [[ "${{ inputs.sign_release }}" == "true" ]]; then
-            production+=(--production)
+            verify_args+=(--production)
           fi
-          python3 tools/verify_macos_release.py \
-            --dmg "${dmg[0]}" --pkg "${pkg[0]}" \
-            --evidence-dir "${evidence[0]}" \
-            --expected-application-name "${EXPECTED_APPLICATION_NAME}" \
-            --expected-release-version "${EXPECTED_RELEASE_VERSION}" \
-            --expected-source-uri "${EXPECTED_SOURCE_URI}" \
-            --expected-source-sha "${EXPECTED_SOURCE_SHA}" \
-            --expected-builder-id "${EXPECTED_BUILDER_ID}" \
-            --expected-build-type "${EXPECTED_BUILD_TYPE}" \
-            --expected-update-channel "${EXPECTED_UPDATE_CHANNEL}" \
-            "${production[@]}"
+          python3 tools/verify_macos_release.py "${verify_args[@]}"
 
       - name: Install and test generated macOS package
         timeout-minutes: 20

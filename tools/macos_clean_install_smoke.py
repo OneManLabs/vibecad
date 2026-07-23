@@ -239,12 +239,14 @@ def _run_installed_smoke(root: Path, application: Path) -> dict[str, Any]:
     import Part
 
     import VibeCADAcceptance
+    import VibeCADImportAssets
     import VibeCADProject
     import VibeCADSession
+    import VibeCADStepValidator
     from VibeCADCore import VibeCADService
     from VibeCADProvider import BaseProvider, ProviderResult
     from VibeCADRevision import VibeCADRevisionStore
-    from tool_impl.service import project_export
+    from tool_impl.service import project_export, project_import_step
 
     root.mkdir(parents=True, exist_ok=True)
     document_path = root / "clean-machine-parametric.FCStd"
@@ -344,9 +346,12 @@ def _run_installed_smoke(root: Path, application: Path) -> dict[str, Any]:
         "revision_count": len(records),
         "module_paths": {
             "VibeCADAcceptance": str(Path(VibeCADAcceptance.__file__).resolve()),
+            "VibeCADImportAssets": str(Path(VibeCADImportAssets.__file__).resolve()),
             "VibeCADProject": str(Path(VibeCADProject.__file__).resolve()),
             "VibeCADSession": str(Path(VibeCADSession.__file__).resolve()),
+            "VibeCADStepValidator": str(Path(VibeCADStepValidator.__file__).resolve()),
             "project_export": str(Path(project_export.__file__).resolve()),
+            "project_import_step": str(Path(project_import_step.__file__).resolve()),
         },
         "document": {
             "path": str(document_path),

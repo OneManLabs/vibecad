@@ -13,6 +13,7 @@ import sys
 import tempfile
 from typing import Any
 
+from VibeCADAssemblyExplodedView import validate_assembly_configurations
 from tool_impl.service.mesh_analyze import analyze_mesh
 
 
@@ -24,6 +25,7 @@ def validate_open_document(document: Any) -> dict[str, Any]:
     errors: list[str] = []
     techdraw_checks = 0
     assembly_checks = 0
+    exploded_view_checks = 0
     spreadsheet_checks = 0
     material_checks = 0
     mesh_checks = 0
@@ -146,7 +148,7 @@ def validate_open_document(document: Any) -> dict[str, Any]:
                 errors.append(f"{obj.Name}: assembly component has no linked source")
         elif type_id == "Assembly::AssemblyObject":
             assembly_checks += 1
-            _validate_assembly(obj, errors)
+            exploded_view_checks += _validate_assembly(obj, errors)
         for property_path, expression in list(
             getattr(obj, "ExpressionEngine", []) or []
         ):
@@ -177,6 +179,7 @@ def validate_open_document(document: Any) -> dict[str, Any]:
         "errors": errors,
         "techdraw_checks": techdraw_checks,
         "assembly_checks": assembly_checks,
+        "exploded_view_checks": exploded_view_checks,
         "spreadsheet_checks": spreadsheet_checks,
         "material_checks": material_checks,
         "mesh_checks": mesh_checks,
@@ -325,7 +328,7 @@ def _fem_result_objects(analysis: Any, solver: Any) -> list[Any]:
     return [results[name] for name in sorted(results)]
 
 
-def _validate_assembly(assembly: Any, errors: list[str]) -> None:
+def _validate_assembly(assembly: Any, errors: list[str]) -> int:
     group = list(getattr(assembly, "Group", []) or [])
     components = [
         child
@@ -339,11 +342,13 @@ def _validate_assembly(assembly: Any, errors: list[str]) -> None:
         for child in group
         if str(getattr(child, "TypeId", "")) == "Assembly::JointGroup"
     ]
+    exploded = validate_assembly_configurations(assembly)
+    errors.extend(exploded["errors"])
     if not components:
         errors.append(f"{assembly.Name}: assembly has no components")
     if len(joint_groups) != 1:
         errors.append(f"{assembly.Name}: assembly must have one joint group")
-        return
+        return int(exploded["view_count"])
     joints = list(getattr(joint_groups[0], "Group", []) or [])
     grounded = 0
     constrained = 0
@@ -375,6 +380,7 @@ def _validate_assembly(assembly: Any, errors: list[str]) -> None:
                 errors.append(
                     f"{assembly.Name}: assembly solver returned {solver_code}"
                 )
+    return int(exploded["view_count"])
 
 
 def _validate_cam_job(job: Any, errors: list[str]) -> None:
@@ -484,6 +490,7 @@ def worker_main() -> None:
             "object_count": len(opened.Objects),
             "techdraw_checks": validation["techdraw_checks"],
             "assembly_checks": validation["assembly_checks"],
+            "exploded_view_checks": validation["exploded_view_checks"],
             "spreadsheet_checks": validation["spreadsheet_checks"],
             "material_checks": validation["material_checks"],
             "mesh_checks": validation["mesh_checks"],

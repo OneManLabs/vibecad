@@ -9,7 +9,12 @@ set(VibeCAD_Scripts
     TestVibeCADCapabilityRouter.py
     TestVibeCADTier2Benchmark.py
     TestVibeCADDrawingExport.py
+    TestVibeCADExplodedView.py
+    TestVibeCADLiveTier1Benchmark.py
+    TestVibeCADLiveGeometryValidators.py
+    TestVibeCADStepImport.py
     VibeCADAcceptance.py
+    VibeCADAssemblyExplodedView.py
     VibeCADAddonManagerPolicy.py
     VibeCADAudit.py
     VibeCADAuditCollector.py
@@ -18,6 +23,7 @@ set(VibeCAD_Scripts
     VibeCADExportGuard.py
     VibeCADAuth.py
     VibeCADBenchmark.py
+    VibeCADLiveBenchmark.py
     VibeCADBuild123d.py
     VibeCADCapabilityRouter.py
     VibeCADCodex.py
@@ -28,6 +34,7 @@ set(VibeCAD_Scripts
     VibeCADEditState.py
     VibeCADEnterpriseRuntime.py
     VibeCADGrid.py
+    VibeCADImportAssets.py
     VibeCADImageCalibration.py
     VibeCADManufacturing.py
     VibeCADGeometry.py
@@ -55,6 +62,8 @@ set(VibeCAD_Scripts
     VibeCADSCIM.py
     VibeCADProject.py
     VibeCADSession.py
+    VibeCADStepSandbox.py
+    VibeCADStepValidator.py
     VibeCADScriptedEditor.py
     VibeCADScriptedOwnership.py
     VibeCADScriptedProcess.py
@@ -124,6 +133,11 @@ set(VibeCAD_Resources
     vibecad-prompt-starters.svg
 )
 
+set(VibeCAD_LiveBenchmarkAssets
+    tier1_live_provider_runner.py
+    tier1_cases.json
+)
+
 file(GLOB_RECURSE VibeCAD_ToolImplScripts
     CONFIGURE_DEPENDS
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -131,7 +145,12 @@ file(GLOB_RECURSE VibeCAD_ToolImplScripts
 )
 
 add_custom_target(VibeCADScripts ALL
-    SOURCES ${VibeCAD_Scripts} ${VibeCAD_ToolImplScripts} ${VibeCAD_Resources}
+    SOURCES
+        ${VibeCAD_Scripts}
+        ${VibeCAD_ToolImplScripts}
+        ${VibeCAD_Resources}
+        ${CMAKE_SOURCE_DIR}/tests/benchmark/tier1_live_provider_runner.py
+        ${CMAKE_SOURCE_DIR}/tests/benchmark/tier1_cases.json
 )
 
 fc_target_copy_resource(VibeCADScripts
@@ -142,12 +161,26 @@ fc_target_copy_resource(VibeCADScripts
     ${VibeCAD_Resources}
 )
 
+fc_target_copy_resource(VibeCADScripts
+    ${CMAKE_SOURCE_DIR}/tests/benchmark
+    ${CMAKE_BINARY_DIR}/Mod/VibeCAD/live_benchmark
+    ${VibeCAD_LiveBenchmarkAssets}
+)
+
 install(
     FILES
         ${VibeCAD_Scripts}
         ${VibeCAD_Resources}
     DESTINATION
         Mod/VibeCAD
+)
+
+install(
+    FILES
+        ${CMAKE_SOURCE_DIR}/tests/benchmark/tier1_live_provider_runner.py
+        ${CMAKE_SOURCE_DIR}/tests/benchmark/tier1_cases.json
+    DESTINATION
+        Mod/VibeCAD/live_benchmark
 )
 
 install(

@@ -11,6 +11,7 @@ from VibeCADEditState import active_edit_object
 
 ActionHandler = Callable[[], dict[str, Any]]
 VerificationHandler = Callable[[dict[str, Any]], dict[str, Any]]
+RollbackHandler = Callable[[], None]
 
 
 def _diagnostic_generation_advanced(
@@ -40,10 +41,18 @@ def _active_edit_recompute_objects(doc: Any) -> list[Any] | None:
     return None
 
 
+def _active_document_changed(app: Any, document: Any | None) -> bool:
+    """Return whether a transaction lost its captured document scope."""
+
+    return document is not None and getattr(app, "ActiveDocument", None) is not document
+
+
 def run_freecad_transaction(
     name: str,
     handler: ActionHandler,
     verifier: VerificationHandler | None = None,
+    *,
+    rollback_handler: RollbackHandler | None = None,
 ) -> dict[str, Any]:
     """Run one native FreeCAD transaction and publish only a valid result.
 
@@ -101,6 +110,7 @@ def run_freecad_transaction(
     commit_succeeded = False
     rollback_attempted = False
     rollback_succeeded = False
+    native_abort_succeeded = False
     rollback_error: str | None = None
     try:
         if doc is not None and hasattr(doc, "openTransaction"):
@@ -114,8 +124,10 @@ def run_freecad_transaction(
         except Exception as exc:
             operation_error = str(exc)
         finally:
-            handler_diagnostics = recompute_diagnostic_summary(App.ActiveDocument or doc)
-        active_doc = App.ActiveDocument or doc
+            handler_diagnostics = recompute_diagnostic_summary(doc)
+        if _active_document_changed(App, doc) and operation_error is None:
+            operation_error = "The active CAD document changed during the transaction."
+        active_doc = doc
         handler_recomputed = _diagnostic_generation_advanced(
             baseline_diagnostics,
             handler_diagnostics,
@@ -154,13 +166,29 @@ def run_freecad_transaction(
                 verification = verifier(result)
             except Exception as exc:
                 verification = {"ok": False, "error": str(exc), "checks": []}
-        final_diagnostics = recompute_diagnostic_summary(App.ActiveDocument or doc)
+        if _active_document_changed(App, doc):
+            if operation_error is None:
+                operation_error = (
+                    "The active CAD document changed during the transaction."
+                )
+            verification = dict(verification)
+            verification["ok"] = False
+            checks = list(verification.get("checks", []) or [])
+            checks.append(
+                {
+                    "ok": False,
+                    "name": "document_scope_is_unchanged",
+                    "message": operation_error,
+                }
+            )
+            verification["checks"] = checks
+        final_diagnostics = recompute_diagnostic_summary(doc)
         native_diagnostics = _merge_recompute_diagnostics(
             baseline_diagnostics,
             handler_diagnostics,
             final_diagnostics,
         )
-        active_doc = App.ActiveDocument or doc
+        active_doc = doc
         candidate_after = _document_snapshot(active_doc)
         candidate_delta = _document_delta(before, candidate_after)
         diagnostic_scope = _transaction_object_scope(
@@ -203,7 +231,7 @@ def run_freecad_transaction(
                         rollback_attempted = True
                         try:
                             doc.abortTransaction()
-                            rollback_succeeded = True
+                            native_abort_succeeded = True
                         except Exception as rollback_exc:
                             rollback_error = str(rollback_exc)
                 transaction_pending = False
@@ -211,11 +239,33 @@ def run_freecad_transaction(
                 rollback_attempted = True
                 try:
                     doc.abortTransaction()
-                    rollback_succeeded = True
+                    native_abort_succeeded = True
                 except Exception as exc:
                     rollback_error = str(exc)
                 transaction_pending = False
-        after = _document_snapshot(App.ActiveDocument or doc)
+        if rollback_attempted:
+            if rollback_handler is not None:
+                try:
+                    rollback_handler()
+                except Exception as exc:
+                    compensation_error = f"Compensating rollback failed: {exc}"
+                    rollback_error = (
+                        f"{rollback_error}; {compensation_error}"
+                        if rollback_error
+                        else compensation_error
+                    )
+            rollback_after = _document_snapshot(doc)
+            residual_delta = _document_delta(before, rollback_after)
+            rollback_succeeded = (
+                native_abort_succeeded
+                and rollback_error is None
+                and not _delta_has_changes(residual_delta)
+            )
+            if not rollback_succeeded and rollback_error is None:
+                rollback_error = (
+                    "Native abort left document changes after rollback verification."
+                )
+        after = _document_snapshot(doc)
         document_delta = _document_delta(before, after)
         state_change = _state_change(
             document_delta,
@@ -246,29 +296,29 @@ def run_freecad_transaction(
             "handler_recomputed": handler_recomputed,
         }
         if not transaction_ok:
-            if operation_error:
+            if rollback_error:
+                transaction["failure_code"] = "TRANSACTION_ROLLBACK_FAILED"
+                transaction["failure_stage"] = "native_call"
+            elif operation_error:
                 transaction["failure_code"] = "NATIVE_OPERATION_FAILED"
                 transaction["failure_stage"] = "native_call"
             elif recompute_error or diagnostic_error:
                 transaction["failure_code"] = "NATIVE_RECOMPUTE_FAILED"
                 transaction["failure_stage"] = "native_recompute"
-            elif rollback_error:
-                transaction["failure_code"] = "TRANSACTION_ROLLBACK_FAILED"
-                transaction["failure_stage"] = "native_call"
             elif commit_error:
                 transaction["failure_code"] = "TRANSACTION_COMMIT_FAILED"
                 transaction["failure_stage"] = "native_call"
             else:
                 transaction["failure_code"] = "POSTCONDITION_FAILED"
                 transaction["failure_stage"] = "postcondition"
-            if operation_error:
+            if rollback_error:
+                transaction["error"] = rollback_error
+            elif operation_error:
                 transaction["error"] = operation_error
             elif recompute_error:
                 transaction["error"] = recompute_error
             elif diagnostic_error:
                 transaction["error"] = diagnostic_error
-            elif rollback_error:
-                transaction["error"] = rollback_error
             elif commit_error:
                 transaction["error"] = commit_error
             elif verification.get("error"):
@@ -279,6 +329,8 @@ def run_freecad_transaction(
                 transaction["commit_error"] = commit_error
             if recompute_error:
                 transaction["recompute_error"] = recompute_error
+            if operation_error:
+                transaction["operation_error"] = operation_error
         return transaction
     except Exception as exc:
         emergency_rollback_error = None
@@ -286,22 +338,53 @@ def run_freecad_transaction(
             rollback_attempted = True
             try:
                 doc.abortTransaction()
-                rollback_succeeded = True
+                native_abort_succeeded = True
             except Exception as rollback_exc:
                 emergency_rollback_error = str(rollback_exc)
             transaction_pending = False
+        if rollback_attempted:
+            if rollback_handler is not None:
+                try:
+                    rollback_handler()
+                except Exception as rollback_exc:
+                    compensation_error = (
+                        f"Compensating rollback failed: {rollback_exc}"
+                    )
+                    emergency_rollback_error = (
+                        f"{emergency_rollback_error}; {compensation_error}"
+                        if emergency_rollback_error
+                        else compensation_error
+                    )
+            residual_delta = _document_delta(
+                before,
+                _document_snapshot(doc),
+            )
+            rollback_succeeded = (
+                native_abort_succeeded
+                and emergency_rollback_error is None
+                and not _delta_has_changes(residual_delta)
+            )
+            if not rollback_succeeded and emergency_rollback_error is None:
+                emergency_rollback_error = (
+                    "Native abort left document changes after rollback verification."
+                )
         document_delta = _document_delta(
             before,
-            _document_snapshot(App.ActiveDocument or doc),
+            _document_snapshot(doc),
         )
         transaction = {
             "ok": False,
-            "failure_code": "TRANSACTION_ORCHESTRATION_FAILED",
+            "failure_code": (
+                "TRANSACTION_ROLLBACK_FAILED"
+                if emergency_rollback_error
+                else "TRANSACTION_ORCHESTRATION_FAILED"
+            ),
             "failure_stage": "native_call",
-            "error": str(exc),
+            "error": emergency_rollback_error or str(exc),
+            "orchestration_error": str(exc),
             "result": result,
             "document_delta": document_delta,
-            "native_diagnostics": recompute_diagnostic_summary(App.ActiveDocument or doc),
+            "native_diagnostics": recompute_diagnostic_summary(doc),
             "transaction_name": name,
             "state_change": _state_change(
                 document_delta,
@@ -340,13 +423,83 @@ def _document_snapshot(doc: Any | None) -> dict[str, Any]:
         }
         shape = _shape_summary(obj)
         if shape.get("available") and _should_include_shape_in_snapshot(obj, shape):
+            if str(getattr(obj, "TypeId", "")) == "Assembly::AssemblyObject":
+                # Assembly recompute can replace an equivalent compound and
+                # change only its process-local topology hash. Child link
+                # placements and the remaining shape facts are authoritative.
+                shape = dict(shape)
+                shape.pop("shape_hash", None)
             item["shape"] = shape
+        placement = _placement_summary(getattr(obj, "Placement", None))
+        if placement is not None:
+            item["placement"] = placement
+        managed_properties = _vibecad_property_summary(obj)
+        if managed_properties:
+            item["vibecad_properties"] = managed_properties
         objects.append(item)
     return {
         "document": getattr(doc, "Name", None),
         "object_count": len(objects),
         "objects": objects,
     }
+
+
+def _placement_summary(placement: Any) -> dict[str, Any] | None:
+    """Return stable placement facts for links and other placed objects."""
+    if placement is None:
+        return None
+    try:
+        base = placement.Base
+        quaternion = list(placement.Rotation.Q)
+        if len(quaternion) != 4:
+            return None
+        return {
+            "position_mm": {
+                "x": float(base.x),
+                "y": float(base.y),
+                "z": float(base.z),
+            },
+            "rotation_xyzw": [float(value) for value in quaternion],
+        }
+    except Exception:
+        return None
+
+
+_UNSUPPORTED_PROPERTY = object()
+
+
+def _snapshot_property_value(value: Any) -> Any:
+    """Convert a managed property to one stable, JSON-safe snapshot value."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    name = getattr(value, "Name", None)
+    if isinstance(name, str) and name:
+        return {"object": name}
+    if isinstance(value, (list, tuple)):
+        result = []
+        for item in value:
+            converted = _snapshot_property_value(item)
+            if converted is _UNSUPPORTED_PROPERTY:
+                return _UNSUPPORTED_PROPERTY
+            result.append(converted)
+        return result
+    return _UNSUPPORTED_PROPERTY
+
+
+def _vibecad_property_summary(obj: Any) -> dict[str, Any]:
+    """Capture VibeCAD-owned properties that can change accepted provenance."""
+    result: dict[str, Any] = {}
+    for raw_name in sorted(getattr(obj, "PropertiesList", []) or []):
+        name = str(raw_name)
+        if not name.startswith("VibeCAD"):
+            continue
+        try:
+            converted = _snapshot_property_value(getattr(obj, name))
+        except Exception:
+            continue
+        if converted is not _UNSUPPORTED_PROPERTY:
+            result[name] = converted
+    return result
 
 
 def _should_include_shape_in_snapshot(obj: Any, shape: dict[str, Any]) -> bool:
@@ -448,6 +601,14 @@ def _document_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, 
         "deleted_objects": [before_objects[name] for name in sorted(before_names - after_names)],
         "changed_objects": changed,
     }
+
+
+def _delta_has_changes(document_delta: dict[str, Any]) -> bool:
+    """Return whether one snapshot delta contains any retained document change."""
+    return any(
+        bool(document_delta.get(key))
+        for key in ("created_objects", "deleted_objects", "changed_objects")
+    )
 
 
 def _state_change(

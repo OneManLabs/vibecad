@@ -47,6 +47,7 @@ ANTHROPIC_ADAPTIVE_EFFORT = {
     "xhigh": "xhigh",
 }
 ANTHROPIC_STREAM_MAX_ATTEMPTS = 3
+OPENAI_SDK_MAX_RETRIES = 2
 
 
 VIBECAD_SYSTEM_INSTRUCTIONS = """You are VibeCAD, a principal mechanical design engineer operating the user's live FreeCAD document through the supplied tools. The current user message is the authority. A simple solid that only resembles the request is a failure.
@@ -187,6 +188,16 @@ def _provider_option(context: dict[str, Any], name: str) -> bool:
     return bool(options.get(name)) if isinstance(options, dict) else False
 
 
+def _provider_positive_integer_option(
+    context: dict[str, Any], name: str
+) -> int | None:
+    options = context.get("_vibecad_provider_options")
+    value = options.get(name) if isinstance(options, dict) else None
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
 def _anthropic_system_blocks(context: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -258,6 +269,9 @@ class OpenAIProvider(BaseProvider):
         max_turns: int | None = None,
         base_url: str | None = None,
         web_search_enabled: bool = False,
+        max_request_bytes: int | None = None,
+        max_output_tokens_per_request: int | None = None,
+        max_total_tokens: int | None = None,
     ) -> None:
         self.model = model
         self.api_key = api_key
@@ -266,6 +280,9 @@ class OpenAIProvider(BaseProvider):
         self.max_turns = max_turns
         self.base_url = base_url
         self.web_search_enabled = bool(web_search_enabled)
+        self.max_request_bytes = max_request_bytes
+        self.max_output_tokens_per_request = max_output_tokens_per_request
+        self.max_total_tokens = max_total_tokens
 
     def run(
         self,
@@ -279,6 +296,9 @@ class OpenAIProvider(BaseProvider):
             provider_context = dict(context)
             provider_context["_vibecad_provider_options"] = {
                 "web_search_enabled": self.web_search_enabled,
+                "max_request_bytes": self.max_request_bytes,
+                "max_output_tokens_per_request": self.max_output_tokens_per_request,
+                "max_total_tokens": self.max_total_tokens,
             }
             return _run_provider_subprocess(
                 prompt=prompt,
@@ -596,6 +616,10 @@ class ChatGPTSubscriptionProvider(BaseProvider):
             if thread_id and event_thread_id and event_thread_id != thread_id:
                 return
             if turn_id and event_turn_id and event_turn_id != turn_id:
+                return
+            usage_event = _codex_usage_progress_event(method, params)
+            if usage_event is not None:
+                _emit_provider_progress(progress_callback, usage_event)
                 return
             if method == "item/agentMessage/delta":
                 delta = str(params.get("delta") or "")
@@ -1958,6 +1982,146 @@ def _object_payload(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _provider_usage_payload(value: Any, *, provider: str) -> dict[str, int]:
+    """Normalize one provider usage object without estimating missing tokens."""
+
+    payload = _object_payload(value)
+    total_payload = _object_payload(payload.get("total"))
+    if total_payload:
+        payload = total_payload
+
+    def count(source: dict[str, Any], *names: str) -> int:
+        for name in names:
+            candidate = source.get(name)
+            if isinstance(candidate, int) and not isinstance(candidate, bool):
+                return max(0, candidate)
+        return 0
+
+    def has_count(source: dict[str, Any], *names: str) -> bool:
+        return any(
+            isinstance(source.get(name), int)
+            and not isinstance(source.get(name), bool)
+            and source.get(name) >= 0
+            for name in names
+        )
+
+    input_details = _object_payload(
+        payload.get("input_tokens_details")
+        or payload.get("inputTokenDetails")
+        or payload.get("input_tokens_detail")
+    )
+    output_details = _object_payload(
+        payload.get("output_tokens_details")
+        or payload.get("outputTokenDetails")
+        or payload.get("output_tokens_detail")
+    )
+    input_tokens = count(payload, "input_tokens", "inputTokens")
+    output_tokens = count(payload, "output_tokens", "outputTokens")
+    cached_input_tokens = count(
+        input_details, "cached_tokens", "cachedTokens", "cachedInputTokens"
+    ) or count(
+        payload,
+        "cache_read_input_tokens",
+        "cached_input_tokens",
+        "cachedInputTokens",
+    )
+    reasoning_tokens = count(
+        output_details,
+        "reasoning_tokens",
+        "reasoningTokens",
+        "reasoningOutputTokens",
+    ) or count(payload, "reasoning_tokens", "reasoningOutputTokens")
+    if provider == "anthropic":
+        input_tokens += count(payload, "cache_creation_input_tokens")
+        input_tokens += cached_input_tokens
+    total_tokens = count(payload, "total_tokens", "totalTokens")
+    if not has_count(payload, "total_tokens", "totalTokens"):
+        total_tokens = input_tokens + output_tokens
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _provider_usage_measurement(value: Any, *, provider: str) -> dict[str, Any]:
+    """Describe whether raw provider usage has all required token counts."""
+
+    payload = _object_payload(value)
+    total_payload = _object_payload(payload.get("total"))
+    if total_payload:
+        payload = total_payload
+
+    def has_count(*names: str) -> bool:
+        return any(
+            isinstance(payload.get(name), int)
+            and not isinstance(payload.get(name), bool)
+            and payload.get(name) >= 0
+            for name in names
+        )
+
+    required = {
+        "input_tokens": ("input_tokens", "inputTokens"),
+        "output_tokens": ("output_tokens", "outputTokens"),
+    }
+    if str(provider or "").strip().lower() in {"openai", "chatgpt"}:
+        required["total_tokens"] = ("total_tokens", "totalTokens")
+    missing = [
+        field for field, aliases in required.items() if not has_count(*aliases)
+    ]
+    normalized = _provider_usage_payload(value, provider=provider)
+    if normalized["total_tokens"] < (
+        normalized["input_tokens"] + normalized["output_tokens"]
+    ):
+        missing.append("consistent_total_tokens")
+    return {
+        "available": bool(payload),
+        "complete": not missing,
+        "missing_fields": missing,
+    }
+
+
+def _provider_usage_event(
+    *, provider: str, turn: int, mode: str, usage: Any, usage_provider: str
+) -> dict[str, Any]:
+    """Create one stable usage event for benchmark and product telemetry."""
+
+    measurement = _provider_usage_measurement(usage, provider=usage_provider)
+    return {
+        "event": "provider_usage",
+        "provider": provider,
+        "turn": turn,
+        "mode": mode,
+        "usage_available": measurement["available"],
+        "usage_complete": measurement["complete"],
+        "usage_missing_fields": measurement["missing_fields"],
+        "usage": _provider_usage_payload(usage, provider=usage_provider),
+    }
+
+
+def _codex_usage_progress_event(
+    method: str, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Normalize a supported cumulative Codex token-usage notification."""
+
+    if method not in {
+        "thread/tokenUsage/updated",
+        "turn/tokenUsage/updated",
+        "tokenUsage/updated",
+    }:
+        return None
+    raw_usage = params.get("tokenUsage") or params.get("usage") or {}
+    return _provider_usage_event(
+        provider="ChatGPT subscription",
+        turn=1,
+        mode="cumulative",
+        usage=raw_usage,
+        usage_provider="chatgpt",
+    )
+
+
 def _markdown_with_sources(text: str, sources: list[tuple[str, str]]) -> str:
     clean_text = str(text or "").strip()
     unique: list[tuple[str, str]] = []
@@ -2096,7 +2260,7 @@ def _openai_child_main(
 
     client_kwargs: dict[str, Any] = {
         "api_key": api_key or os.environ.get("OPENAI_API_KEY") or "vibecad-local",
-        "max_retries": 2,
+        "max_retries": OPENAI_SDK_MAX_RETRIES,
     }
     if base_url:
         client_kwargs["base_url"] = base_url
@@ -2109,6 +2273,16 @@ def _openai_child_main(
     client = OpenAI(**client_kwargs)
     live_context = dict(context)
     web_search_enabled = _provider_option(live_context, "web_search_enabled")
+    max_request_bytes = _provider_positive_integer_option(
+        live_context, "max_request_bytes"
+    )
+    max_output_tokens = _provider_positive_integer_option(
+        live_context, "max_output_tokens_per_request"
+    )
+    max_total_tokens = _provider_positive_integer_option(
+        live_context, "max_total_tokens"
+    )
+    observed_total_tokens = 0
     tools, function_to_tool = tool_surface(live_context)
     input_history = user_input(prompt, live_context)
     try:
@@ -2134,6 +2308,40 @@ def _openai_child_main(
                 request["reasoning"] = reasoning
             if include_items:
                 request["include"] = include_items
+            if max_output_tokens is not None:
+                request["max_output_tokens"] = max_output_tokens
+            request_bytes = len(
+                json.dumps(
+                    _json_safe(request),
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+            if max_request_bytes is not None and request_bytes > max_request_bytes:
+                raise RuntimeError(
+                    "The provider request exceeds the configured byte limit before transmission."
+                )
+            if (
+                max_total_tokens is not None
+                and max_output_tokens is not None
+                and observed_total_tokens + request_bytes + max_output_tokens
+                > max_total_tokens
+            ):
+                raise RuntimeError(
+                    "The conservative provider token bound would exceed the case limit before transmission."
+                )
+            _send_child_progress(
+                conn,
+                {
+                    "event": "provider_request_started",
+                    "provider": "OpenAI",
+                    "turn": turn,
+                    "request_bytes": request_bytes,
+                    "sdk_max_retries": OPENAI_SDK_MAX_RETRIES,
+                    "api_attempt_ceiling": 1 + OPENAI_SDK_MAX_RETRIES,
+                },
+            )
             _capture_outbound_request(
                 live_context,
                 provider="openai",
@@ -2225,6 +2433,27 @@ def _openai_child_main(
                 raise RuntimeError(
                     "OpenAI Responses stream ended without response.completed."
                 )
+            usage_event = _provider_usage_event(
+                provider="OpenAI",
+                turn=turn,
+                mode="incremental",
+                usage=getattr(completed_response, "usage", None),
+                usage_provider="openai",
+            )
+            _send_child_progress(conn, usage_event)
+            if (
+                max_total_tokens is not None
+                and usage_event["usage_complete"] is not True
+            ):
+                raise RuntimeError(
+                    "The provider returned incomplete token usage for a bounded request."
+                )
+            observed_total_tokens += int(usage_event["usage"]["total_tokens"])
+            if (
+                max_total_tokens is not None
+                and observed_total_tokens > max_total_tokens
+            ):
+                raise RuntimeError("The provider exceeded the case token limit.")
             assistant_text = _openai_final_text(
                 completed_response, "".join(text_parts)
             )
@@ -2870,6 +3099,9 @@ def _anthropic_response_summary(response: Any) -> dict[str, Any]:
         "thinking_chars": thinking_chars,
         "tool_names": tool_names[:8],
         "tool_name_count": len(tool_names),
+        "usage": _provider_usage_payload(
+            getattr(response, "usage", None), provider="anthropic"
+        ),
     }
 
 
@@ -3222,13 +3454,24 @@ def _anthropic_child_main(
             response = _stream_response_with_retries(turn)
             content_blocks = list(response.content)
             response_text = _anthropic_final_text(content_blocks)
+            response_summary = _anthropic_response_summary(response)
             _send_child_progress(
                 conn,
                 {
                     "event": "anthropic_response_received",
                     "turn": turn,
-                    **_anthropic_response_summary(response),
+                    **response_summary,
                 },
+            )
+            _send_child_progress(
+                conn,
+                _provider_usage_event(
+                    provider="Anthropic",
+                    turn=turn,
+                    mode="incremental",
+                    usage=getattr(response, "usage", None),
+                    usage_provider="anthropic",
+                ),
             )
             messages.append(
                 {

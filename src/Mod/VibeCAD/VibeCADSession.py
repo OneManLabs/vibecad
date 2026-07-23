@@ -131,6 +131,8 @@ MAX_TURN_CONTEXT_JSON_BYTES = 16 * 1024
 MAX_PROVIDER_TOOL_SCHEMAS_JSON_BYTES = 128 * 1024
 MAX_VIBESCRIPT_TOOL_SCHEMAS_JSON_BYTES = 16 * 1024
 
+_PREPARED_MUTATION_CAPABILITY_SEAL = object()
+
 
 @dataclass(frozen=True)
 class VibeCADResponse:
@@ -139,6 +141,62 @@ class VibeCADResponse:
     context: dict[str, Any]
     tool_trace: list[dict[str, Any]]
     error: str | None = None
+
+
+class _PreparedMutationCapability:
+    """One session-owned authority to mutate inside a prepared acceptance."""
+
+    __slots__ = ("_active", "_acceptance_id", "_seal", "_service")
+
+    def __init__(
+        self,
+        service: VibeCADService,
+        acceptance_id: str,
+        *,
+        _seal: object,
+    ) -> None:
+        if _seal is not _PREPARED_MUTATION_CAPABILITY_SEAL:
+            raise TypeError("Prepared mutation capabilities are session-owned.")
+        clean_id = str(acceptance_id or "").strip()
+        if not clean_id:
+            raise ValueError("The prepared acceptance identity is missing.")
+        self._service = service
+        self._acceptance_id = clean_id
+        self._seal = _seal
+        self._active = True
+
+
+def _issue_prepared_mutation_capability(
+    service: VibeCADService, prepared_acceptance: Any
+) -> _PreparedMutationCapability:
+    """Issue one opaque capability after the coordinator prepares rollback."""
+
+    return _PreparedMutationCapability(
+        service,
+        str(getattr(prepared_acceptance, "acceptance_id", "") or ""),
+        _seal=_PREPARED_MUTATION_CAPABILITY_SEAL,
+    )
+
+
+def _prepared_mutation_capability_is_active(
+    capability: Any, service: VibeCADService
+) -> bool:
+    """Check a capability without invoking an overrideable instance method."""
+
+    return bool(
+        type(capability) is _PreparedMutationCapability
+        and capability._seal is _PREPARED_MUTATION_CAPABILITY_SEAL
+        and capability._service is service
+        and capability._active is True
+        and capability._acceptance_id
+    )
+
+
+def _revoke_prepared_mutation_capability(capability: Any) -> None:
+    """Revoke a session capability before candidate validation or rollback."""
+
+    if type(capability) is _PreparedMutationCapability:
+        capability._active = False
 
 
 def _on_document_thread(
@@ -235,8 +293,9 @@ class _ScriptedEngineRunner:
 
     Scripted geometry executes outside the GUI process, then waits for the live
     document to become idle before a bounded owner-thread publication. Detached
-    native BREP may be imported on the provider worker; STEP and other
-    document-coupled transfers remain on the document thread.
+    native BREP, including validated STEP BREP, may be parsed on the provider
+    worker. Only document object assignment, copy, and recompute remain on the
+    document thread for this path.
     """
 
     engine: str
@@ -909,8 +968,22 @@ def _minimal_runtime_state(service: VibeCADService) -> dict[str, Any]:
 def _context_for_provider(
     service: VibeCADService,
     session_trigger: dict[str, Any] | None = None,
+    *,
+    include_registered_import_assets: bool = True,
 ) -> dict[str, Any]:
-    raw_context = service.provider_context_summary()
+    if include_registered_import_assets:
+        raw_context = service.provider_context_summary()
+    else:
+        lightweight_builder = getattr(
+            service, "provider_context_summary_without_import_assets", None
+        )
+        raw_context = (
+            lightweight_builder()
+            if callable(lightweight_builder)
+            else service.provider_context_summary()
+        )
+        raw_context = dict(raw_context)
+        raw_context.pop("registered_import_assets", None)
     # Treat the session boundary as the final model-context allowlist. This
     # prevents any service implementation from accidentally reintroducing broad
     # CAD or domain snapshots.
@@ -919,6 +992,7 @@ def _context_for_provider(
         "selection",
         "view_screenshot",
         "reference_images",
+        "registered_import_assets",
         "design_brief",
     )
     context = {
@@ -965,6 +1039,21 @@ def _context_for_provider(
     if session_trigger:
         context["session_trigger"] = dict(session_trigger)
     return context
+
+
+def _with_registered_import_assets(
+    context: dict[str, Any],
+    registered_import_assets: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Attach one frozen, path-free asset snapshot to a provider context."""
+
+    result = dict(context)
+    result.pop("registered_import_assets", None)
+    if isinstance(registered_import_assets, dict):
+        result["registered_import_assets"] = json.loads(
+            json.dumps(registered_import_assets)
+        )
+    return result
 
 
 def _apply_managed_outbound_policy(
@@ -1135,6 +1224,7 @@ def _provider_state_payload(context: dict[str, Any]) -> dict[str, Any]:
         "modeling_surface",
         "document",
         "selection",
+        "registered_import_assets",
         "design_brief",
     )
     return {
@@ -1860,19 +1950,31 @@ def make_provider_tool_runner(
     turn_surface: dict[str, Any] | None = None,
     turn_schemas: list[dict[str, Any]] | None = None,
     turn_modeling_surface: dict[str, Any] | None = None,
+    turn_registered_import_assets: dict[str, Any] | None = None,
     managed_policy: dict[str, Any] | None = None,
     provider_online: bool = False,
+    _prepared_mutation_capability: Any = None,
 ):
     authorized_surface = json.loads(json.dumps(turn_surface)) if isinstance(turn_surface, dict) else None
     authorized_schemas = json.loads(json.dumps(turn_schemas or []))
     authorized_modeling_surface = json.loads(json.dumps(turn_modeling_surface or {}))
+    authorized_import_assets = (
+        json.loads(json.dumps(turn_registered_import_assets))
+        if isinstance(turn_registered_import_assets, dict)
+        else None
+    )
 
     def accept_controlled_surface_transition(tool_name: str) -> None:
         nonlocal authorized_surface, authorized_schemas, authorized_modeling_surface
         if tool_name not in {"partdesign.edit_sketch", "sketcher.close_sketch"}:
             return
         refreshed = _on_document_thread(
-            document_thread_dispatch, lambda: _context_for_provider(service, session_trigger)
+            document_thread_dispatch,
+            lambda: _context_for_provider(
+                service,
+                session_trigger,
+                include_registered_import_assets=False,
+            ),
         )
         candidate = refreshed.get("provider_tool_surface")
         if not isinstance(candidate, dict) or not isinstance(authorized_surface, dict):
@@ -2029,6 +2131,22 @@ def make_provider_tool_runner(
                     required_changes=[{"choose_available_tool": visible_names}],
                 )
             )
+        if (
+            tool.safety.value in MUTATING_SAFETY_LEVELS
+            and not _prepared_mutation_capability_is_active(
+                _prepared_mutation_capability, service
+            )
+        ):
+            return finalize(
+                tool_failure(
+                    tool_name,
+                    "ACCEPTANCE_BOUNDARY_REQUIRED",
+                    "precondition",
+                    "A prepared revision acceptance is required before a CAD mutation.",
+                    requested={"arguments_json": arguments_json},
+                    observed={"prepared_acceptance": False},
+                )
+            )
         authorizer = getattr(service, "authorize", None)
         if callable(authorizer):
             permission = (
@@ -2157,7 +2275,14 @@ def make_provider_tool_runner(
 
             review_context = _on_document_thread(
                 document_thread_dispatch,
-                lambda: _context_for_provider(service, session_trigger),
+                lambda: _context_for_provider(
+                    service,
+                    session_trigger,
+                    include_registered_import_assets=False,
+                ),
+            )
+            review_context = _with_registered_import_assets(
+                review_context, authorized_import_assets
             )
             review_context = _apply_managed_outbound_policy(
                 review_context,
@@ -2253,6 +2378,83 @@ def make_provider_tool_runner(
         if edit_block is not None:
             edit_block["requested"] = args
             return finalize(edit_block)
+        if tool_name == "project.import_step":
+            from VibeCADStepValidator import StepValidationError, ValidatedStepCandidate
+            from tool_impl.service.project_import_step import (
+                capture_import_step,
+                publish_validated_step,
+                validate_captured_step,
+            )
+
+            validation = None
+            try:
+                captured = _on_document_thread(
+                    document_thread_dispatch,
+                    lambda: capture_import_step(service, str(args["asset_id"])),
+                )
+                _emit(
+                    progress_callback,
+                    {
+                        "event": "step_import_validation_started",
+                        "asset_id": str(args["asset_id"]),
+                    },
+                )
+                validation = validate_captured_step(
+                    captured, cancellation_check=cancellation_check
+                )
+                payload = _on_document_thread(
+                    document_thread_dispatch,
+                    lambda: publish_validated_step(service, captured, validation),
+                )
+            except StepValidationError as exc:
+                payload = tool_failure(
+                    tool_name,
+                    exc.code,
+                    "external_process",
+                    str(exc),
+                    requested=args,
+                    observed=exc.evidence,
+                    cancelled=exc.code == "STEP_VALIDATION_CANCELLED",
+                )
+            except Exception as exc:
+                payload = tool_failure(
+                    tool_name,
+                    "STEP_IMPORT_FAILED",
+                    "precondition",
+                    "The STEP import failed at a protected processing boundary.",
+                    requested=args,
+                    observed={"exception_type": exc.__class__.__name__},
+                )
+            finally:
+                if type(validation) is ValidatedStepCandidate:
+                    cleaner = lambda: ValidatedStepCandidate.cleanup(validation)
+                elif isinstance(validation, ValidatedStepCandidate):
+                    cleaner = None
+                else:
+                    cleaner = getattr(validation, "cleanup", None)
+                if callable(cleaner):
+                    try:
+                        cleaner()
+                    except Exception as cleanup_exc:
+                        payload = tool_failure(
+                            tool_name,
+                            "STEP_IMPORT_CLEANUP_FAILED",
+                            "external_process",
+                            "The private STEP validation artifacts could not be removed.",
+                            requested=args,
+                            observed={
+                                "exception_type": cleanup_exc.__class__.__name__
+                            },
+                        )
+            _emit(
+                progress_callback,
+                {
+                    "event": "step_import_validation_completed",
+                    "asset_id": str(args["asset_id"]),
+                    "ok": bool(payload.get("ok")),
+                },
+            )
+            return finalize(payload)
         if (
             vibescript_domains.get_domain_adapter(
                 tool_name.split(".")[1]
@@ -2350,9 +2552,15 @@ def make_provider_tool_runner(
     def provider_update() -> dict[str, Any]:
         refreshed = _on_document_thread(
             document_thread_dispatch,
-            lambda: _context_for_provider(service, session_trigger),
+            lambda: _context_for_provider(
+                service,
+                session_trigger,
+                include_registered_import_assets=False,
+            ),
         )
-        completed = refreshed
+        completed = _with_registered_import_assets(
+            refreshed, authorized_import_assets
+        )
         _consume_context_view_attachment(
             service, completed, document_thread_dispatch
         )
@@ -2514,6 +2722,7 @@ def _mutation_has_design_brief_update(traces: list[dict[str, Any]]) -> bool:
 
 def _changed_objects(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     changed: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
     keys = {
         "created_objects": "created",
         "changed_objects": "modified",
@@ -2540,6 +2749,10 @@ def _changed_objects(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                             identity = str(name or item)
                         else:
                             identity = str(item)
+                        key = (identity, category)
+                        if key in seen:
+                            continue
+                        seen.add(key)
                         changed.append({"object": identity, "change": category})
     return changed
 
@@ -2672,13 +2885,30 @@ def _run_session_turn(
         turn_conversation_id = str(recorded.get("conversation_id") or "") or None
     _emit_run_state(progress_callback, "Inspecting design")
     _emit(progress_callback, {"event": "context_build_started"})
-    context = _on_document_thread(
+    defer_import_asset_hashing = isinstance(active_service, VibeCADService)
+    def capture_context_and_scope() -> tuple[dict[str, Any], dict[str, Any]]:
+        captured_context = _context_for_provider(
+            active_service,
+            session_trigger,
+            include_registered_import_assets=not defer_import_asset_hashing,
+        )
+        return captured_context, active_service.project_scope_snapshot()
+
+    context, scope = _on_document_thread(
         document_thread_dispatch,
-        lambda: _context_for_provider(active_service, session_trigger),
+        capture_context_and_scope,
     )
-    scope = _on_document_thread(
-        document_thread_dispatch, active_service.project_scope_snapshot
-    )
+    if defer_import_asset_hashing:
+        # The manifest and up to 12 large STEP assets can require substantial
+        # file I/O and SHA-256 work. This call must stay outside the Qt and
+        # FreeCAD document-thread dispatcher.
+        context["registered_import_assets"] = (
+            active_service.provider_registered_import_assets(
+                scope=scope,
+                cancellation_check=cancellation_check,
+                progress_callback=progress_callback,
+            )
+        )
     coordinator = VibeCADAcceptanceCoordinator(scope["root"], str(scope["project_id"]))
     save_copy, restore_live, validate_document, write_metadata = _acceptance_callbacks(
         active_service, document_thread_dispatch, scope
@@ -2688,6 +2918,9 @@ def _run_session_turn(
         write_metadata=write_metadata,
     )
     prepared_acceptance = coordinator.prepare(persistence["file_path"], save_copy)
+    prepared_mutation_capability = _issue_prepared_mutation_capability(
+        active_service, prepared_acceptance
+    )
     tool_trace: list[dict[str, Any]] = []
     active_provider = provider or _on_document_thread(
         document_thread_dispatch,
@@ -2754,8 +2987,14 @@ def _run_session_turn(
             if isinstance(context.get("modeling_surface"), dict)
             else None
         ),
+        turn_registered_import_assets=(
+            dict(context["registered_import_assets"])
+            if isinstance(context.get("registered_import_assets"), dict)
+            else None
+        ),
         managed_policy=managed_policy,
         provider_online=provider_online,
+        _prepared_mutation_capability=prepared_mutation_capability,
     )
     _emit(
         progress_callback,
@@ -2763,18 +3002,21 @@ def _run_session_turn(
     )
     _emit_run_state(progress_callback, "Creating preview")
     try:
-        result = _run_provider(
-            active_provider,
-            _provider_prompt(
-                clean_prompt,
+        try:
+            result = _run_provider(
+                active_provider,
+                _provider_prompt(
+                    clean_prompt,
+                    context,
+                    prompt_section=prompt_section,
+                ),
                 context,
-                prompt_section=prompt_section,
-            ),
-            context,
-            tool_runner,
-            cancellation_check,
-            progress_callback,
-        )
+                tool_runner,
+                cancellation_check,
+                progress_callback,
+            )
+        finally:
+            _revoke_prepared_mutation_capability(prepared_mutation_capability)
         final_output = str(result.final_output or "").strip()
         mutation_trace = _mutating_trace(tool_trace)
         failed_mutations = [item for item in mutation_trace if not item.get("ok")]
@@ -2953,7 +3195,15 @@ def _run_session_turn(
             )
         final_context = _on_document_thread(
             document_thread_dispatch,
-            lambda: _context_for_provider(active_service, session_trigger),
+            lambda: _context_for_provider(
+                active_service,
+                session_trigger,
+                include_registered_import_assets=False,
+            ),
+        )
+        final_context = _with_registered_import_assets(
+            final_context,
+            context.get("registered_import_assets"),
         )
         final_context["candidate_decision"] = dict(decision_metadata)
         _emit(
@@ -3004,7 +3254,15 @@ def _run_session_turn(
         )
         failed_context = _on_document_thread(
             document_thread_dispatch,
-            lambda: _context_for_provider(active_service, session_trigger),
+            lambda: _context_for_provider(
+                active_service,
+                session_trigger,
+                include_registered_import_assets=False,
+            ),
+        )
+        failed_context = _with_registered_import_assets(
+            failed_context,
+            context.get("registered_import_assets"),
         )
         return VibeCADResponse(
             provider=provider_name,

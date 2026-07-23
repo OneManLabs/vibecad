@@ -85,7 +85,8 @@ def test_validates_reopenable_techdraw_dependencies():
 
     assert result == {
         "ok": True, "errors": [], "techdraw_checks": 3,
-        "assembly_checks": 0, "spreadsheet_checks": 0, "material_checks": 0,
+        "assembly_checks": 0, "exploded_view_checks": 0,
+        "spreadsheet_checks": 0, "material_checks": 0,
         "mesh_checks": 0,
         "surface_checks": 0,
         "cam_checks": 0,

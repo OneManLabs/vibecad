@@ -76,6 +76,8 @@ def _attempt(
         elapsed_seconds=0.25,
         diagnostics=failure_diagnostics(stages),
         artifact_paths=["case.FCStd"],
+        source_commit="a" * 40 if live else None,
+        artifact_sha256={"case.FCStd": "b" * 64} if live else None,
     )
 
 

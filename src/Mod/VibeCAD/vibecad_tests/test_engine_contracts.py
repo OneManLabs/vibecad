@@ -42,7 +42,7 @@ class TestStageAwareFailureRendering:
 
     def test_pre_execution_stages_render_as_rejected(self) -> None:
         gui = self._gui()
-        for stage in ("schema", "surface", "edit_state", "precondition"):
+        for stage in ("schema", "surface", "edit_state", "permission", "precondition"):
             text = gui._format_progress_event(
                 {
                     "event": "tool_call_completed",

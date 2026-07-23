@@ -1,6 +1,6 @@
 {
   "schema": "vibecad-implementation-backlog-v1",
-  "updated_at": "2026-07-22T23:14:05Z",
+  "updated_at": "2026-07-23T00:18:43Z",
   "items": [
     {
       "id": "P0-001",
@@ -120,6 +120,15 @@
       "acceptance_criteria": ["The assistant can inspect final native objects for FDM risks", "Heuristics are not presented as certification", "Analysis does not mutate the CAD document"]
     },
     {
+      "id": "P4-005",
+      "milestone": "Phase 4",
+      "work_item": "Run and score a fail-closed Tier 1 live-model benchmark",
+      "dependencies": ["P4-001", "P4-002"],
+      "status": "in_progress",
+      "test_requirements": ["exact source and runtime identity", "fresh provider readiness", "no prompt before readiness", "complete seven-case attempt evidence", "adversarial result validation", "separate content-bound human ratings"],
+      "acceptance_criteria": ["A live prompt starts only after exact source, runtime, provider, model, and readiness checks pass", "Every case keeps complete failure or success evidence", "A score requires a complete bound human rating set", "The Tier 1 live-model rate is at least 95 percent before the product target can pass"]
+    },
+    {
       "id": "P5-002",
       "milestone": "Phase 5",
       "work_item": "Add typed common 3D exports with real round-trip checks",
@@ -219,6 +228,24 @@
       "acceptance_criteria": ["Typed tools create bounded native profile, pocket, and drilling paths", "Tool and operation sequencing persists after reopen", "The accepted workflow produces controlled output without protected-model collision", "Restoring the parent removes all CAM artifacts safely"]
     },
     {
+      "id": "P5-013",
+      "milestone": "Phase 5",
+      "work_item": "Create, accept, reopen, and restore a native assembly exploded view",
+      "dependencies": ["P3-003", "P5-005"],
+      "status": "complete",
+      "test_requirements": ["native managed view graph", "one configuration for each assembly", "translation-only moves", "content-bound metadata", "post-provenance create-fault cleanup", "snapshot-verified compensating rollback", "save-close-reopen-recompute", "compare and parent restore", "headless native CTest", "GUI unittest"],
+      "acceptance_criteria": ["Typed tools create one editable native exploded-view configuration", "Reopen preserves the managed graph and exact placements", "A failed create leaves no created or changed object", "A failed restore returns to the exact pre-call snapshot", "Parent restore returns the accepted assembly state"]
+    },
+    {
+      "id": "P5-014",
+      "milestone": "Phase 5",
+      "work_item": "Import one content-bound STEP solid and accept an editable native follow-up",
+      "dependencies": ["P3-003", "P5-002"],
+      "status": "complete",
+      "test_requirements": ["asynchronous human path registration", "opaque provider asset ID", "size and SHA-256 binding", "descriptor-relative no-follow asset store", "registration fault injection and recovery", "isolated solid validation", "bounded worker output and BREP access", "macOS Seatbelt file, network, write, and child-execution denial", "immutable candidate evidence", "authenticated descriptor and private-path binding", "off-document detached BREP parse", "prepared mutation capability and revocation", "real run_prompt acceptance with exactly one revision", "malformed and truncated rejection", "optimized-Python fail-closed check", "native import provenance", "editable native follow-up", "candidate review invariants", "save-close-reopen-recompute", "STEP and STL export", "compare and parent restore", "registered native CTest", "clean complete 1,690-test CTest inventory"],
+      "acceptance_criteria": ["A provider cannot supply or receive a local import path", "Only the exact worker-validated BREP bytes can create native geometry", "A failed parse, evidence check, provenance write, or CAD save cannot advance accepted state", "The accepted import and native follow-up reopen and export", "The registered native CTest passes"]
+    },
+    {
       "id": "P6-001",
       "milestone": "Phase 6",
       "work_item": "Implement enterprise policy, RBAC, identity boundaries, audit events, proxy, CA, and MDM settings",
@@ -241,8 +268,8 @@
       "milestone": "Phase 8",
       "work_item": "Keep Windows and Linux portable and define follow-up parity work",
       "dependencies": ["P7-001"],
-      "status": "pending",
-      "test_requirements": ["Windows smoke", "Linux smoke", "schema compatibility"],
+      "status": "in_progress",
+      "test_requirements": ["versioned portable Python contract", "macOS adapter import scan", "shared module compilation", "102 local contract tests", "Windows CI smoke", "Linux CI smoke", "schema compatibility", "exact source SHA evidence"],
       "acceptance_criteria": ["Shared logic builds or passes smoke tests on all supported systems"]
     }
   ]

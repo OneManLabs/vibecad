@@ -1,0 +1,57 @@
+{
+  "macos_framework_import_roots": [
+    "AppKit",
+    "AVFoundation",
+    "Cocoa",
+    "CoreFoundation",
+    "CoreGraphics",
+    "CoreServices",
+    "Foundation",
+    "Metal",
+    "MetalKit",
+    "Photos",
+    "PyObjCTools",
+    "Quartz",
+    "Security",
+    "WebKit",
+    "objc"
+  ],
+  "macos_import_adapters": [
+    "src/Mod/VibeCAD/VibeCADAuth.py",
+    "src/Mod/VibeCAD/VibeCADManagedPolicy.py",
+    "src/Mod/VibeCAD/VibeCADUpdate.py"
+  ],
+  "portable_modules": [
+    "src/Mod/VibeCAD/VibeCADAuth.py",
+    "src/Mod/VibeCAD/VibeCADBenchmark.py",
+    "src/Mod/VibeCAD/VibeCADCapabilityRouter.py",
+    "src/Mod/VibeCAD/VibeCADDesignBrief.py",
+    "src/Mod/VibeCAD/VibeCADIdentity.py",
+    "src/Mod/VibeCAD/VibeCADImportAssets.py",
+    "src/Mod/VibeCAD/VibeCADManagedPolicy.py",
+    "src/Mod/VibeCAD/VibeCADRevision.py",
+    "src/Mod/VibeCAD/VibeCADStepSandbox.py"
+  ],
+  "python": {
+    "implementation": "CPython",
+    "version": "3.11.14"
+  },
+  "schema": "vibecad-portability-contract-v1",
+  "source_root": "src/Mod/VibeCAD",
+  "tests": {
+    "platform_adapter": [
+      "src/Mod/VibeCAD/vibecad_tests/test_auth_keychain.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_managed_policy.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_step_sandbox.py"
+    ],
+    "pure": [
+      "src/Mod/VibeCAD/vibecad_tests/test_benchmark_contract.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_capability_router.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_design_brief.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_identity_rbac.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_portability_contract.py",
+      "src/Mod/VibeCAD/vibecad_tests/test_revision_store.py"
+    ]
+  },
+  "version": 1
+}

@@ -395,6 +395,15 @@ class _FakeResponses:
                 id="response_1",
                 output=[reasoning, function_call],
                 output_text="",
+                usage=_ResponsesItem(
+                    {
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                        "total_tokens": 12,
+                        "input_tokens_details": {"cached_tokens": 3},
+                        "output_tokens_details": {"reasoning_tokens": 1},
+                    }
+                ),
             )
             return _ResponsesStream(
                 [
@@ -425,6 +434,9 @@ class _FakeResponses:
                 )
             ],
             output_text="finished",
+            usage=_ResponsesItem(
+                {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8}
+            ),
         )
         return _ResponsesStream([SimpleNamespace(type="response.completed", response=completed)])
 
@@ -432,7 +444,8 @@ class _FakeResponses:
 class _FakeOpenAI:
     instance = None
 
-    def __init__(self, **_kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
+        self.client_kwargs = dict(kwargs)
         self.responses = _FakeResponses()
         _FakeOpenAI.instance = self
 
@@ -492,6 +505,7 @@ def test_openai_tool_loop_manages_response_history_without_response_ids(
     )
 
     requests = _FakeOpenAI.instance.responses.requests
+    assert _FakeOpenAI.instance.client_kwargs["max_retries"] == 2
     assert len(requests) == 2
     assert all("previous_response_id" not in request for request in requests)
     assert all(request["instructions"] for request in requests)
@@ -507,4 +521,190 @@ def test_openai_tool_loop_manages_response_history_without_response_ids(
     assert tool_output["ok"] is True
     assert tool_output["echo"] == "hello"
     assert any(message.get("type") == "done" for message in connection.sent)
+    usage_events = [
+        message["event"]
+        for message in connection.sent
+        if message.get("type") == "progress"
+        and message.get("event", {}).get("event") == "provider_usage"
+    ]
+    assert [event["usage"]["total_tokens"] for event in usage_events] == [12, 8]
+    assert all(event["usage_available"] is True for event in usage_events)
+    assert all(event["usage_complete"] is True for event in usage_events)
+    assert all(not event["usage_missing_fields"] for event in usage_events)
+    assert usage_events[0]["usage"]["cached_input_tokens"] == 3
+    assert usage_events[0]["usage"]["reasoning_tokens"] == 1
     assert connection.closed
+
+
+def test_openai_request_byte_limit_fails_before_sdk_request(monkeypatch) -> None:
+    openai_module = ModuleType("openai")
+    openai_module.OpenAI = _FakeOpenAI
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+    context = {
+        "provider_tool_schemas": [],
+        "_vibecad_provider_options": {
+            "max_request_bytes": 1,
+            "max_output_tokens_per_request": 100,
+            "max_total_tokens": 200,
+        },
+    }
+    connection = _OpenAIChildConnection(context)
+
+    provider._openai_child_main(
+        connection,
+        prompt="This request must not be transmitted.",
+        context=context,
+        model="test-model",
+        api_key="test-key",
+        reasoning_effort=None,
+        timeout_seconds=None,
+        max_turns=1,
+        clear_inherited_modules=False,
+    )
+
+    assert _FakeOpenAI.instance.responses.requests == []
+    errors = [
+        message
+        for message in connection.sent
+        if message.get("type") == "error"
+    ]
+    assert errors
+    assert "byte limit before transmission" in str(errors[0]["error"])
+
+
+def test_provider_usage_normalizes_openai_model_objects() -> None:
+    usage = _ResponsesItem(
+        {
+            "input_tokens": 20,
+            "output_tokens": 7,
+            "total_tokens": 27,
+            "input_tokens_details": {"cached_tokens": 6},
+            "output_tokens_details": {"reasoning_tokens": 4},
+        }
+    )
+
+    assert provider._provider_usage_payload(usage, provider="openai") == {
+        "input_tokens": 20,
+        "output_tokens": 7,
+        "cached_input_tokens": 6,
+        "reasoning_tokens": 4,
+        "total_tokens": 27,
+    }
+
+
+def test_anthropic_usage_event_includes_cache_fields() -> None:
+    usage = _ResponsesItem(
+        {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 4,
+        }
+    )
+    event = provider._provider_usage_event(
+        provider="Anthropic",
+        turn=2,
+        mode="incremental",
+        usage=usage,
+        usage_provider="anthropic",
+    )
+
+    assert event["event"] == "provider_usage"
+    assert event["turn"] == 2
+    assert event["usage_available"] is True
+    assert event["usage_complete"] is True
+    assert event["usage_missing_fields"] == []
+    assert event["usage"] == {
+        "input_tokens": 17,
+        "output_tokens": 5,
+        "cached_input_tokens": 4,
+        "reasoning_tokens": 0,
+        "total_tokens": 22,
+    }
+
+
+def test_codex_cumulative_usage_event_uses_current_field_names() -> None:
+    event = provider._codex_usage_progress_event(
+        "thread/tokenUsage/updated",
+        {
+            "tokenUsage": {
+                "total": {
+                    "inputTokens": 30,
+                    "outputTokens": 9,
+                    "cachedInputTokens": 8,
+                    "reasoningOutputTokens": 5,
+                    "totalTokens": 39,
+                }
+            }
+        },
+    )
+
+    assert event == {
+        "event": "provider_usage",
+        "provider": "ChatGPT subscription",
+        "turn": 1,
+        "mode": "cumulative",
+        "usage_available": True,
+        "usage_complete": True,
+        "usage_missing_fields": [],
+        "usage": {
+            "input_tokens": 30,
+            "output_tokens": 9,
+            "cached_input_tokens": 8,
+            "reasoning_tokens": 5,
+            "total_tokens": 39,
+        },
+    }
+    assert provider._codex_usage_progress_event("unrelated", {}) is None
+
+
+def test_missing_openai_usage_is_not_a_complete_measurement() -> None:
+    event = provider._provider_usage_event(
+        provider="OpenAI",
+        turn=1,
+        mode="incremental",
+        usage=None,
+        usage_provider="openai",
+    )
+
+    assert event["usage_available"] is False
+    assert event["usage_complete"] is False
+    assert event["usage_missing_fields"] == [
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+    ]
+    assert event["usage"] == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
+def test_usage_normalizer_rejects_negative_and_boolean_counts_as_observations() -> None:
+    assert provider._provider_usage_payload(
+        {
+            "input_tokens": -1,
+            "output_tokens": True,
+            "cachedInputTokens": -4,
+            "reasoningOutputTokens": False,
+        },
+        provider="chatgpt",
+    ) == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
+def test_usage_normalizer_preserves_an_inconsistent_reported_total() -> None:
+    usage = provider._provider_usage_payload(
+        {"input_tokens": 10, "output_tokens": 5, "total_tokens": 4},
+        provider="openai",
+    )
+
+    assert usage["total_tokens"] == 4

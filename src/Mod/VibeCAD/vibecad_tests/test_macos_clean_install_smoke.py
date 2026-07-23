@@ -136,6 +136,10 @@ def test_workflow_cleans_stale_builds_and_runs_exact_package_gate() -> None:
     cleanup = source.index("- name: Remove clean-machine test installation")
     assert restore < clean < build < identity_check < bundle
     assert release_check < package_gate < cleanup
+    release_block = source[release_check:package_gate]
+    assert "production=()" not in release_block
+    assert "verify_args=(" in release_block
+    assert 'python3 tools/verify_macos_release.py "${verify_args[@]}"' in release_block
     assert "rm -rf -- .pixi/envs/default .pixi/envs/package" in source
     assert "pixi clean --build" in source
     assert "tools/verify_vibecad_source_identity.py" in source

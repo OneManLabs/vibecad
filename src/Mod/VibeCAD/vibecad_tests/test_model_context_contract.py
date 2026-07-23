@@ -196,6 +196,12 @@ def test_provider_context_does_not_copy_conversation_cache() -> None:
     service.provider_turn_selection_summary = lambda: _active_state()["selection"]
     service.view_screenshot_summary = lambda: {"captured": False}
     service.pending_reference_image_attachments = lambda: []
+    service.provider_registered_import_assets = lambda: {
+        "schema": "vibecad-project-import-assets-context-v1",
+        "version": 1,
+        "asset_count": 0,
+        "assets": [],
+    }
     service.design_brief = lambda: {
         "schema": "vibecad-design-brief-v1",
         "version": 1,
@@ -213,6 +219,35 @@ def test_provider_context_does_not_copy_conversation_cache() -> None:
     assert "conversation" not in context
     assert "must not leak" not in json.dumps(context)
     assert not hasattr(VibeCADService, "provider_conversation_cache_snapshot")
+
+
+def test_lightweight_provider_context_does_not_hash_import_assets() -> None:
+    service = object.__new__(VibeCADService)
+    service.active_workbench_name = lambda: "PartWorkbench"
+    service.modeling_engine = lambda: "native"
+    service.last_capability_route = lambda: None
+    service.provider_turn_document_summary = lambda: {"name": "Part"}
+    service.provider_turn_selection_summary = lambda: {
+        "selection_count": 0,
+        "selection": [],
+    }
+    service.view_screenshot_summary = lambda: {"captured": False}
+    service.pending_reference_image_attachments = lambda: []
+    service.design_brief = lambda: {
+        "schema": "vibecad-design-brief-v1",
+        "version": 1,
+    }
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError(
+            "Import assets must not be hashed during document-context capture."
+        )
+
+    service.provider_registered_import_assets = fail_if_called
+
+    context = service.provider_context_summary_without_import_assets()
+
+    assert "registered_import_assets" not in context
 
 
 def test_legacy_tool_trace_is_removed_during_conversation_validation() -> None:

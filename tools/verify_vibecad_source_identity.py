@@ -16,6 +16,8 @@ REQUIRED_MODULES = (
     "VibeCADGui.py",
     "VibeCADProject.py",
     "VibeCADAddonManagerPolicy.py",
+    "VibeCADImportAssets.py",
+    "VibeCADStepValidator.py",
 )
 
 _EXCLUDED_DIRECTORIES = {
@@ -23,6 +25,7 @@ _EXCLUDED_DIRECTORIES = {
     "build123d_runtime",
     "codex_runtime",
     "generated",
+    "live_benchmark",
     "openscad_runtime",
     "tests",
     "vibecad_tests",

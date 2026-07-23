@@ -418,3 +418,106 @@ Production Developer ID and notarization credentials are required only for the
 credential-backed signing and notarization gates. Their absence does not stop
 ad-hoc signing, credential-free packaging, scanning, installed-package testing,
 or other release work.
+
+## D-063: Exploded views use one native managed translation configuration
+
+Date: 2026-07-22. Status: Accepted.
+
+Each assembly can have one VibeCAD-managed native exploded-view configuration.
+The configuration contains native view and step objects, exact component names,
+assembled placements, translation vectors, and a content identity. A step can
+change translation only. It cannot add rotation. Restore applies the stored
+assembled placements and writes a new metadata generation. If restore fails, a
+compensating rollback restores the exact pre-call placements and metadata. The
+transaction then verifies the restored snapshot before it reports failure.
+
+If create fails after it writes assembly provenance, compensating cleanup removes
+the managed graph and restores the assembly provenance. Verification requires no
+created or changed object.
+
+## D-064: STEP import uses opaque project assets and an authenticated native handoff
+
+Date: 2026-07-22. Status: Accepted.
+
+Only a human or platform adapter can register a local STEP path. Registration
+copies the file into the project and binds its opaque asset ID, byte size, and
+SHA-256 value. The provider cannot supply or receive a local path. A bounded
+`FreeCADCmd` worker validates an exact private copy and does not inherit
+`PYTHONPATH`. The worker writes one content-bound BREP result. The validator
+reads the result and BREP through stable, no-follow descriptors. It checks fixed
+byte limits, revalidates the complete result schema and digest, and opens one
+authenticated descriptor. BREP parsing uses its private pathname while the
+descriptor pins the file. Path-to-inode binding, descriptor metadata, size, and
+SHA-256 are checked before and after parsing. The parser creates a detached
+native shape outside document-thread dispatch. The validator then removes all
+private pathnames and closes the authenticated descriptor. Native publication
+can consume the detached shape one time. It cannot parse the source STEP again
+or substitute a shape with matching coarse dimensions. The document thread does
+only native shape copy, assignment, recompute, and final identity checks.
+Publication stores and verifies a canonical post-recompute BREP identity before
+the acceptance coordinator can create the revision.
+
+On macOS, the safe-mode worker runs in a Seatbelt profile. The profile denies
+network access, denies writes outside its private staging directory, denies
+child process execution, and limits file reads to the required staging and
+runtime roots. File, environment, time, memory, and combined output bounds also
+apply. Unsupported worker-sandbox platforms fail closed. A hard parent-process
+stop can leave a validator temporary directory until the operating system
+removes it. A safe startup sweep remains a separate task.
+
+The secure project asset store requires POSIX descriptor-relative, no-follow
+file operations. Windows disables STEP attachment and returns a typed, path-free
+unavailable state. This optional feature cannot stop other provider turns. A
+Win32 handle-relative store is required before STEP attachment can be enabled on
+Windows.
+
+This first contract requires valid solid geometry, positive volume, and nonempty
+X, Y, and Z bounds. It rejects surface-only content. It creates one static native
+`Part::Feature` for the imported source. It does not reconstruct source sketches,
+feature history, or STEP assembly hierarchy. Native downstream features can
+remain linked and editable.
+
+## D-065: Portability evidence uses a versioned local contract and real CI
+
+Date: 2026-07-22. Status: Accepted.
+
+The portable Python contract names the shared modules, approved macOS adapters,
+exact Python version, and bounded test files. It rejects an unsafe path, a
+macOS-framework import outside an adapter, a source identity mismatch, and an
+unexpected test set. Local tests prove the contract logic. They do not prove a
+Windows or Linux run. Phase 8 stays in progress until the exact source SHA passes
+the contract in both CI systems.
+
+## D-066: A live benchmark cannot start from stale or unbound readiness data
+
+Date: 2026-07-22. Status: Accepted.
+
+The Tier 1 live runner must bind the source SHA, copied runtime, provider, model,
+and fresh readiness record before it sends a prompt. It must retain each complete
+case attempt before scoring. Human ratings use a separate content-bound record.
+The runner stays in progress while adversarial hardening continues. No live
+prompt and no human score means that the Tier 1 live-model target is not complete.
+
+## D-067: A provider mutation needs one active prepared-acceptance capability
+
+Date: 2026-07-22. Status: Accepted.
+
+The provider tool runner rejects each mutating call unless the session holds one
+opaque capability for the prepared acceptance. The session issues this
+capability after preparation and revokes it immediately after provider
+execution. The capability is exact-type, service-scoped, and not reusable. A
+direct runner call, a forged subclass, a wrong service, or a revoked capability
+fails before CAD mutation. Read-only calls do not need this capability.
+
+## D-068: macOS STEP validation uses a fail-closed Seatbelt profile
+
+Date: 2026-07-22. Status: Accepted.
+
+The macOS STEP worker starts through `/usr/bin/sandbox-exec` with a versioned
+profile. The profile permits the initial validator executable and required
+FreeCAD, Python, VibeCAD, staging, and macOS runtime reads. It denies network
+access, child execution, and writes outside staging. Tests cover direct and
+symbolic-link file access, outside writes, local TCP, and child execution. If
+the sandbox service is absent or cannot start, STEP validation fails closed.
+Linux does not claim this macOS control. Windows keeps STEP attachment disabled
+until it has a secure handle-relative asset store.

@@ -344,10 +344,11 @@ def validate_surface_names(
     expects_engine_tools = (
         any(name.startswith(f"{engine}.") for name in allowed) if allowed is not None else True
     )
+    # Classify by the exact common-tool contract. A namespace is not a safety
+    # class: for example, project.export is common, while project.import_step
+    # is a native Part mutation and must not enter a VibeScript surface.
     non_core_names = [
-        name
-        for name in clean_names
-        if name.partition(".")[0] not in {"conversation", "core", "project"}
+        name for name in clean_names if name not in CORE_CONVERSATION_VIEW_TOOLS
     ]
     if engine in {"vibescript", "build123d", "openscad"}:
         if scripted and scripted != {engine}:
@@ -358,7 +359,8 @@ def validate_surface_names(
         native_cad = [
             name
             for name in clean_names
-            if name.partition(".")[0] not in {"conversation", "core", "project", "vibescript"}
+            if name not in CORE_CONVERSATION_VIEW_TOOLS
+            and not name.startswith("vibescript.")
         ]
         if native_cad:
             raise ValueError(
@@ -374,7 +376,7 @@ def validate_surface_names(
             cad_names = [
                 name
                 for name in clean_names
-                    if name.partition(".")[0] not in {"conversation", "core", "project"}
+                if name not in CORE_CONVERSATION_VIEW_TOOLS
             ]
             if cad_names:
                 raise ValueError("An unknown workbench cannot receive CAD authoring tools.")
@@ -382,7 +384,8 @@ def validate_surface_names(
             foreign = [
                 name
                 for name in clean_names
-                    if name.partition(".")[0] not in {"conversation", "core", "project"}
+                if name
+                not in CORE_CONVERSATION_VIEW_TOOLS | NATIVE_ANALYSIS_TOOLS
                 and name not in set(pack.tool_names)
             ]
             if foreign:

@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
+import json
 import math
 from typing import Any, Iterable, Mapping
 
@@ -12,6 +15,8 @@ from typing import Any, Iterable, Mapping
 CASE_ATTEMPT_SCHEMA = "vibecad-benchmark-case-attempt-v2"
 SERIES_SCHEMA = "vibecad-benchmark-series-v2"
 BENCHMARK_VERSION = 2
+HUMAN_RATING_SET_SCHEMA = "vibecad-benchmark-human-rating-set-v1"
+HUMAN_RATING_SET_VERSION = 1
 VALIDATION_STAGES = (
     "geometry",
     "dimensions",
@@ -38,6 +43,28 @@ def _required_string(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise BenchmarkEvidenceError(f"{field} must be a nonempty string.")
     return value.strip()
+
+
+def _utc_timestamp(value: Any, field: str) -> str:
+    text = _required_string(value, field)
+    if not text.endswith("Z"):
+        raise BenchmarkEvidenceError(f"{field} must be a UTC timestamp that ends in Z.")
+    try:
+        parsed = datetime.fromisoformat(text[:-1] + "+00:00")
+    except ValueError as exc:
+        raise BenchmarkEvidenceError(f"{field} is not a valid UTC timestamp.") from exc
+    if parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+        raise BenchmarkEvidenceError(f"{field} must use UTC.")
+    return text
+
+
+def _hex_digest(value: Any, field: str, length: int) -> str:
+    clean = _required_string(value, field).lower()
+    if len(clean) != length or any(
+        character not in "0123456789abcdef" for character in clean
+    ):
+        raise BenchmarkEvidenceError(f"{field} must be a {length}-character hex value.")
+    return clean
 
 
 def _nonnegative_integer(value: Any, field: str) -> int:
@@ -204,6 +231,9 @@ def make_case_attempt(
     elapsed_seconds: float,
     diagnostics: Iterable[Mapping[str, Any]] | None = None,
     artifact_paths: Iterable[str] = (),
+    source_commit: str | None = None,
+    artifact_sha256: Mapping[str, str] | None = None,
+    allow_unrated_live: bool = False,
 ) -> dict[str, Any]:
     """Build and validate one case-attempt record."""
 
@@ -234,11 +264,19 @@ def make_case_attempt(
         "failure_diagnostics": [dict(item) for item in (diagnostics or [])],
         "artifact_paths": [str(path) for path in artifact_paths],
     }
-    validate_case_attempt(record)
+    if source_commit is not None:
+        record["source_commit"] = source_commit
+    if artifact_sha256 is not None:
+        record["artifact_sha256"] = dict(artifact_sha256)
+    validate_case_attempt(record, allow_unrated_live=allow_unrated_live)
     return record
 
 
-def validate_case_attempt(record: Mapping[str, Any]) -> dict[str, Any]:
+def validate_case_attempt(
+    record: Mapping[str, Any],
+    *,
+    allow_unrated_live: bool = False,
+) -> dict[str, Any]:
     """Fail closed unless one case attempt has complete, consistent evidence."""
 
     if not isinstance(record, Mapping):
@@ -354,9 +392,10 @@ def validate_case_attempt(record: Mapping[str, Any]) -> dict[str, Any]:
                 "An unrated instruction-adherence result cannot contain rating data."
             )
         if record["live_model_score"]:
-            raise BenchmarkEvidenceError(
-                "A live-model case requires a human instruction-adherence rating."
-            )
+            if not allow_unrated_live:
+                raise BenchmarkEvidenceError(
+                    "A live-model case requires a human instruction-adherence rating."
+                )
     elif status == "rated":
         rating = adherence.get("rating")
         scale = adherence.get("scale")
@@ -453,7 +492,185 @@ def validate_case_attempt(record: Mapping[str, Any]) -> dict[str, Any]:
         raise BenchmarkEvidenceError(
             "artifact_paths must contain nonempty strings."
         )
+    if record["live_model_score"]:
+        _hex_digest(record.get("source_commit"), "source_commit", 40)
+        digests = record.get("artifact_sha256")
+        if not isinstance(digests, Mapping) or set(digests) != set(artifacts):
+            raise BenchmarkEvidenceError(
+                "A live-model case must bind every artifact path to one SHA-256 digest."
+            )
+        for path, digest in digests.items():
+            _required_string(path, "artifact_sha256 path")
+            _hex_digest(digest, "artifact SHA-256", 64)
     return dict(record)
+
+
+def case_evidence_digest(record: Mapping[str, Any]) -> str:
+    """Bind a rating to immutable case evidence, not to its human score."""
+
+    validated = validate_case_attempt(record, allow_unrated_live=True)
+    evidence = deepcopy(validated)
+    evidence.pop("instruction_adherence", None)
+    encoded = json.dumps(
+        evidence,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def apply_human_rating_set(
+    attempts: Iterable[Mapping[str, Any]],
+    rating_set: Mapping[str, Any],
+    *,
+    run_binding: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Apply one complete, separate rating set to raw live-model evidence."""
+
+    records = [
+        validate_case_attempt(item, allow_unrated_live=True) for item in attempts
+    ]
+    if not records:
+        raise BenchmarkEvidenceError("At least one live-model attempt is required.")
+    for record in records:
+        if record.get("live_model_score") is not True:
+            raise BenchmarkEvidenceError(
+                "A human rating set can apply only to live-model attempts."
+            )
+        adherence = record.get("instruction_adherence")
+        if not isinstance(adherence, Mapping) or adherence.get("status") != "not_rated":
+            raise BenchmarkEvidenceError(
+                "The raw live-model attempt must be unrated before rating application."
+            )
+
+    if not isinstance(rating_set, Mapping):
+        raise BenchmarkEvidenceError("The human rating set must be an object.")
+    expected_set_fields = {
+        "schema",
+        "version",
+        "created_at",
+        "provider",
+        "model",
+        "source_commit",
+        "readiness_sha256",
+        "runtime_identity_sha256",
+        "limits_sha256",
+        "raw_run_sha256",
+        "ratings",
+    }
+    if set(rating_set) != expected_set_fields:
+        raise BenchmarkEvidenceError(
+            "The human rating set contains missing or unknown top-level fields."
+        )
+    if rating_set.get("schema") != HUMAN_RATING_SET_SCHEMA:
+        raise BenchmarkEvidenceError("The human rating-set schema is invalid.")
+    if rating_set.get("version") != HUMAN_RATING_SET_VERSION:
+        raise BenchmarkEvidenceError("The human rating-set version is invalid.")
+    _utc_timestamp(rating_set.get("created_at"), "human rating-set created_at")
+    set_provider = _required_string(rating_set.get("provider"), "rating-set provider")
+    set_model = _required_string(rating_set.get("model"), "rating-set model")
+    set_source = _hex_digest(
+        rating_set.get("source_commit"), "rating-set source_commit", 40
+    )
+    record_identities = {
+        (record["provider"], record["model"], record["source_commit"])
+        for record in records
+    }
+    if record_identities != {(set_provider, set_model, set_source)}:
+        raise BenchmarkEvidenceError(
+            "The human rating-set identity does not match the live evidence."
+        )
+    expected_binding_fields = {
+        "readiness_sha256",
+        "runtime_identity_sha256",
+        "limits_sha256",
+        "raw_run_sha256",
+    }
+    if not isinstance(run_binding, Mapping) or set(run_binding) != expected_binding_fields:
+        raise BenchmarkEvidenceError(
+            "Live human ratings require the exact readiness, runtime, limits, and raw-run binding."
+        )
+    for field in sorted(expected_binding_fields):
+        expected = _hex_digest(run_binding.get(field), f"run binding {field}", 64)
+        observed = _hex_digest(rating_set.get(field), f"rating-set {field}", 64)
+        if observed != expected:
+            raise BenchmarkEvidenceError(
+                f"The human rating set has a stale or mismatched {field} binding."
+            )
+    ratings = rating_set.get("ratings")
+    if not isinstance(ratings, list):
+        raise BenchmarkEvidenceError("The human rating set must contain a ratings list.")
+
+    by_key: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for index, rating in enumerate(ratings):
+        if not isinstance(rating, Mapping):
+            raise BenchmarkEvidenceError(f"Human rating {index} must be an object.")
+        expected_rating_fields = {
+            "provider",
+            "model",
+            "source_commit",
+            "case_id",
+            "attempt",
+            "evidence_sha256",
+            "rating",
+            "scale",
+            "reviewer_id",
+            "notes",
+        }
+        if set(rating) != expected_rating_fields:
+            raise BenchmarkEvidenceError(
+                f"Human rating {index} contains missing or unknown fields."
+            )
+        key = (
+            _required_string(rating.get("case_id"), "human rating case_id"),
+            _positive_integer(rating.get("attempt"), "human rating attempt"),
+        )
+        if key in by_key:
+            raise BenchmarkEvidenceError(
+                f"Duplicate human rating for case {key[0]} attempt {key[1]}."
+            )
+        by_key[key] = rating
+
+    expected_keys = {(item["case_id"], item["attempt"]) for item in records}
+    actual_keys = set(by_key)
+    if expected_keys != actual_keys:
+        missing = sorted(expected_keys - actual_keys)
+        extra = sorted(actual_keys - expected_keys)
+        raise BenchmarkEvidenceError(
+            f"The human rating set is incomplete; missing={missing}, extra={extra}."
+        )
+
+    rated_records: list[dict[str, Any]] = []
+    for record in records:
+        key = (record["case_id"], record["attempt"])
+        rating = by_key[key]
+        bindings = {
+            "provider": record["provider"],
+            "model": record["model"],
+            "source_commit": record["source_commit"],
+            "case_id": record["case_id"],
+            "attempt": record["attempt"],
+            "evidence_sha256": case_evidence_digest(record),
+        }
+        for field, expected in bindings.items():
+            if rating.get(field) != expected:
+                raise BenchmarkEvidenceError(
+                    f"Human rating {key[0]} attempt {key[1]} has a stale or mismatched {field} binding."
+                )
+        scale = rating.get("scale")
+        if not isinstance(scale, Mapping) or set(scale) != {"minimum", "maximum"}:
+            raise BenchmarkEvidenceError("A human rating scale must be an object.")
+        rated = deepcopy(record)
+        rated["instruction_adherence"] = rated_instruction_adherence(
+            rating=rating.get("rating"),
+            scale_minimum=scale.get("minimum"),
+            scale_maximum=scale.get("maximum"),
+            reviewer_id=rating.get("reviewer_id"),
+            notes=rating.get("notes"),
+        )
+        rated_records.append(validate_case_attempt(rated))
+    return rated_records
 
 
 def aggregate_case_attempts(
@@ -625,7 +842,10 @@ def finalize_series_report(
         )
     report["trial_runs"] = sorted(runs, key=lambda item: item["attempt"])
     report["runner_gate_passed"] = all(
-        item["gui_runner_reported_ok"] for item in runs
+        item["case_evidence_passed"]
+        and item["gui_runner_reported_ok"]
+        and item["gui_runner_exit_code"] == 0
+        for item in runs
     )
     return report
 

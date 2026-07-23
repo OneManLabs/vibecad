@@ -194,6 +194,8 @@ _intent_memory_rebuild_thread: threading.Thread | None = None
 _document_thread_invoker: Any | None = None
 _pending_question_waiter: _QuestionWaiter | None = None
 _pending_candidate_decision_waiter: _CandidateDecisionWaiter | None = None
+_step_attachment_active = False
+_step_attachment_thread: threading.Thread | None = None
 
 
 def _is_intent_memory_rebuild_active() -> bool:
@@ -1760,7 +1762,7 @@ def _render_named_run_state(dock: Any, state: Any) -> bool:
 
 #: Failure stages where the tool call was rejected before touching the document.
 _PRE_EXECUTION_FAILURE_STAGES = frozenset(
-    {"schema", "surface", "edit_state", "precondition"}
+    {"schema", "surface", "edit_state", "permission", "precondition"}
 )
 
 #: Failure stages where the tool call executed and the transaction rolled back.
@@ -2333,6 +2335,177 @@ def _attach_image_from_panel() -> None:
     _attach_reference_paths([str(path) for path in paths], source="file dialog")
 
 
+def _attach_step_from_panel() -> None:
+    """Register one STEP file that the user selected in a native dialog."""
+
+    global _step_attachment_active, _step_attachment_thread
+    try:
+        from PySide import QtWidgets
+    except Exception:
+        return
+    if not _require_saved_document():
+        return
+    if _is_assistant_run_active():
+        _set_status_line("Cannot attach a STEP file while a run is active.")
+        return
+    if _step_attachment_active:
+        _set_status_line("A STEP file is already being attached.")
+        return
+    from VibeCADImportAssets import import_asset_store_supported
+
+    if not import_asset_store_supported():
+        _set_status_line(
+            "Secure STEP attachment is not available on this platform."
+        )
+        return
+    dock = _find_dock()
+    path, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
+        dock,
+        "Attach STEP file",
+        "",
+        "STEP files (*.step *.stp)",
+    )
+    if not path:
+        return
+
+    try:
+        service = get_service()
+        scope = service.project_scope_snapshot()
+        document = getattr(App, "ActiveDocument", None)
+        captured_project_root = str(scope.get("root") or "")
+        captured_project_id = str(scope.get("project_id") or "")
+        captured_document_name = str(getattr(document, "Name", "") or "")
+        captured_document_uid = str(getattr(document, "Uid", "") or "")
+        if not all(
+            (
+                captured_project_root,
+                captured_project_id,
+                captured_document_name,
+                captured_document_uid,
+            )
+        ):
+            raise RuntimeError("The saved document identity is incomplete.")
+        service.authorize("design.modify")
+        _ensure_document_thread_invoker()
+    except Exception as exc:
+        _step_attachment_active = False
+        _step_attachment_thread = None
+        _warn(f"VibeCAD STEP attachment failed ({exc.__class__.__name__}).")
+        _append_conversation("VibeCAD", "STEP file not attached.")
+        _render_assistant_run_state(dock, text="STEP file not attached.")
+        return
+    _step_attachment_active = True
+    _render_assistant_run_state(dock, text="Attaching STEP file...")
+
+    def _captured_scope_is_active() -> bool:
+        active_document = getattr(App, "ActiveDocument", None)
+        if active_document is None:
+            return False
+        if (
+            str(getattr(active_document, "Name", "") or "")
+            != captured_document_name
+        ):
+            return False
+        if (
+            str(getattr(active_document, "Uid", "") or "")
+            != captured_document_uid
+        ):
+            return False
+        try:
+            current_scope = service.project_scope_snapshot()
+        except Exception:
+            return False
+        return (
+            str(current_scope.get("root") or "") == captured_project_root
+            and str(current_scope.get("project_id") or "")
+            == captured_project_id
+        )
+
+    def _finish_registration(
+        asset: dict[str, Any] | None,
+        failure_type: str,
+    ) -> None:
+        """Apply one background registration result on the Qt GUI thread."""
+
+        global _step_attachment_active, _step_attachment_thread
+        scope_is_active = _captured_scope_is_active()
+        _step_attachment_active = False
+        _step_attachment_thread = None
+        if not scope_is_active:
+            _render_assistant_run_state(_find_dock() or dock)
+            return
+        final_status = "STEP file not attached."
+        if failure_type or asset is None:
+            _warn(f"VibeCAD STEP attachment failed ({failure_type}).")
+            _append_conversation("VibeCAD", "STEP file not attached.")
+        else:
+            safe_fields = (
+                "schema",
+                "version",
+                "asset_id",
+                "stored_name",
+                "format",
+                "size_bytes",
+                "sha256",
+                "created_at",
+                "project_id",
+                "availability",
+            )
+            safe_asset = {key: asset[key] for key in safe_fields if key in asset}
+            asset_id = str(safe_asset.get("asset_id") or "")
+            _append_conversation(
+                "System",
+                f"STEP file attached. Import asset ID: {asset_id}.",
+                persist=True,
+                metadata={
+                    "event": "step_import_asset_registered",
+                    "source": "human_file_chooser",
+                    "import_asset": safe_asset,
+                },
+            )
+            final_status = "STEP file attached and ready for import."
+        _render_assistant_run_state(_find_dock() or dock, text=final_status)
+
+    def _register_in_background() -> None:
+        from VibeCADImportAssets import register_import_asset
+        from VibeCADManagedPolicy import load_managed_policy, validate_policy
+
+        def _policy_check() -> None:
+            validate_policy(load_managed_policy())
+
+        try:
+            registered = register_import_asset(
+                captured_project_root,
+                captured_project_id,
+                str(path),
+                policy_check=_policy_check,
+                permission_check=lambda _permission: None,
+            )
+            asset = dict(registered)
+            failure_type = ""
+        except BaseException as exc:
+            asset = None
+            failure_type = exc.__class__.__name__
+        _dispatch_to_document_thread(
+            lambda: _finish_registration(asset, failure_type)
+        )
+
+    worker = threading.Thread(
+        target=_register_in_background,
+        name="VibeCAD-step-attachment",
+        daemon=True,
+    )
+    _step_attachment_thread = worker
+    try:
+        worker.start()
+    except BaseException as exc:
+        _step_attachment_thread = None
+        _step_attachment_active = False
+        _warn(f"VibeCAD STEP attachment failed ({exc.__class__.__name__}).")
+        _append_conversation("VibeCAD", "STEP file not attached.")
+        _render_assistant_run_state(dock, text="STEP file not attached.")
+
+
 def _paste_clipboard_reference() -> bool:
     """Attach a clipboard image as a reference. True if the clipboard held one."""
     try:
@@ -2569,6 +2742,7 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
     prompt_box = _find_child("QPlainTextEdit", "VibePrompt", dock)
     attach_button = _find_child("QPushButton", "VibeAttachView", dock)
     attach_image_button = _find_child("QPushButton", "VibeAttachImage", dock)
+    attach_step_button = _find_child("QPushButton", "VibeAttachStep", dock)
     reference_chips = _find_child("QWidget", "VibeReferenceChips", dock)
     conversation_selector = _find_child("QComboBox", "VibeConversationSelector", dock)
     new_conversation = _find_child("QToolButton", "VibeNewConversation", dock)
@@ -2593,6 +2767,10 @@ def _render_assistant_run_state(dock: Any, text: str | None = None) -> None:
         attach_button.setEnabled(document_ready and not busy)
     if attach_image_button is not None:
         attach_image_button.setEnabled(document_ready and not busy)
+    if attach_step_button is not None:
+        attach_step_button.setEnabled(
+            document_ready and not busy and not _step_attachment_active
+        )
     if reference_chips is not None:
         reference_chips.setEnabled(document_ready and not busy)
     if conversation_selector is not None:
@@ -3799,6 +3977,19 @@ def _build_panel_widget():
     )
     attach_image_button.clicked.connect(_attach_image_from_panel)
 
+    attach_step_button = QtWidgets.QPushButton("Attach STEP file", composer_buttons)
+    attach_step_button.setObjectName("VibeAttachStep")
+    attach_step_button.setIcon(QtGui.QIcon(_icon_path(ICON_OPEN_ASSISTANT)))
+    attach_step_button.setIconSize(icon_size)
+    attach_step_button.setToolTip(
+        "Copy a STEP file into this project so VibeCAD can import it."
+    )
+    attach_step_button.setAccessibleName("Attach STEP file")
+    attach_step_button.setAccessibleDescription(
+        "Open a file chooser and copy one STEP file into this project."
+    )
+    attach_step_button.clicked.connect(_attach_step_from_panel)
+
     prompt_starters = QtWidgets.QToolButton(composer_buttons)
     prompt_starters.setObjectName("VibePromptStarters")
     prompt_starters.setIcon(QtGui.QIcon(_icon_path(ICON_PROMPT_STARTERS)))
@@ -3831,6 +4022,7 @@ def _build_panel_widget():
     buttons_layout.addWidget(prompt_starters)
     buttons_layout.addWidget(attach_button)
     buttons_layout.addWidget(attach_image_button)
+    buttons_layout.addWidget(attach_step_button)
     buttons_layout.addStretch(1)
     buttons_layout.addWidget(send_button)
     buttons_layout.addWidget(stop_button)

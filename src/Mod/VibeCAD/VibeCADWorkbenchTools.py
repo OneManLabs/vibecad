@@ -73,6 +73,7 @@ PARTDESIGN_PACK_TOOL_NAMES: tuple[str, ...] = (
 )
 
 PART_PACK_TOOL_NAMES: tuple[str, ...] = (
+    "project.import_step",
     "part.find_subelements",
     "part.measure",
     "part.boolean",
@@ -118,6 +119,8 @@ ASSEMBLY_PACK_TOOL_NAMES: tuple[str, ...] = (
     "assembly.extract_bom",
     "assembly.analyze_interference",
     "assembly.replace_component",
+    "assembly.create_exploded_view",
+    "assembly.restore_exploded_view",
 )
 
 BIM_PACK_TOOL_NAMES: tuple[str, ...] = (

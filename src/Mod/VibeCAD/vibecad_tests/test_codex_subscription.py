@@ -186,10 +186,21 @@ def test_provider_update_keeps_the_turn_surface_frozen_after_workbench_change(
         "domain": "partdesign",
         "surface_id": next_context["provider_tool_surface"]["surface_id"],
     }
-    monkeypatch.setattr(session, "_context_for_provider", lambda *_args: next_context)
+    def refreshed_context(*_args, **kwargs):
+        assert kwargs["include_registered_import_assets"] is False
+        return next_context
+
+    monkeypatch.setattr(session, "_context_for_provider", refreshed_context)
 
     initial_surface = dict(initial["provider_tool_surface"])
     initial_schemas = list(initial["provider_tool_schemas"])
+    initial_assets = {
+        "schema": "vibecad-project-import-assets-context-v1",
+        "version": 1,
+        "project_id": "project-1",
+        "asset_count": 1,
+        "assets": [{"asset_id": "1" * 32, "availability": "verified"}],
+    }
     runner = session.make_provider_tool_runner(
         object(),
         tool_trace=[],
@@ -205,6 +216,7 @@ def test_provider_update_keeps_the_turn_surface_frozen_after_workbench_change(
             "domain": "part",
             "surface_id": initial_surface["surface_id"],
         },
+        turn_registered_import_assets=initial_assets,
     )
 
     updated = runner.provider_update()
@@ -214,6 +226,7 @@ def test_provider_update_keeps_the_turn_surface_frozen_after_workbench_change(
     assert updated["workbench"] == "PartWorkbench"
     assert updated["modeling_surface"]["invalidated"] is True
     assert updated["modeling_surface"]["next_turn_required"] is True
+    assert updated["registered_import_assets"] == initial_assets
     assert "vibescript_domain" not in updated
 
 

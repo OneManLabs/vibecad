@@ -11,7 +11,7 @@ import sys
 from VibeCADScriptedProcess import run_process
 
 
-def test_large_worker_output_cannot_fill_a_parent_pipe(tmp_path: Path) -> None:
+def test_large_worker_output_stops_at_a_hard_combined_limit(tmp_path: Path) -> None:
     command = [
         sys.executable,
         "-c",
@@ -32,9 +32,32 @@ def test_large_worker_output_cannot_fill_a_parent_pipe(tmp_path: Path) -> None:
     )
 
     assert result["started"] is True
-    assert result["returncode"] == 0
     assert result["timed_out"] is False
-    assert result["stdout"].endswith(f"STDOUT_END{os.linesep}")
-    assert result["stderr"].endswith(f"STDERR_END{os.linesep}")
+    assert result["output_exceeded"] is True
+    assert result["output_bytes"] > result["output_limit_bytes"]
     assert len(result["stdout"]) <= 16_000
     assert len(result["stderr"]) <= 16_000
+
+
+def test_small_worker_output_is_retained_without_exceeding_limit(
+    tmp_path: Path,
+) -> None:
+    command = [
+        sys.executable,
+        "-c",
+        "import sys;print('stdout-ok');print('stderr-ok', file=sys.stderr)",
+    ]
+
+    result = run_process(
+        command,
+        cwd=tmp_path,
+        environment=dict(os.environ),
+        cancellation_check=None,
+        timeout_seconds=10.0,
+        memory_limit_bytes=0,
+    )
+
+    assert result["returncode"] == 0
+    assert result["output_exceeded"] is False
+    assert result["stdout"].strip() == "stdout-ok"
+    assert result["stderr"].strip() == "stderr-ok"

@@ -10,9 +10,13 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
-import tempfile
+import threading
 import time
 from typing import Any
+
+
+MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024
+PROCESS_OUTPUT_TAIL_BYTES = 64 * 1024
 
 
 def process_memory_bytes(pid: int) -> int | None:
@@ -106,12 +110,57 @@ def _terminate(process: subprocess.Popen[str]) -> None:
         process.wait(timeout=3.0)
 
 
-def _read_output_tail(stream: Any, *, max_bytes: int = 64_000) -> str:
-    stream.flush()
-    stream.seek(0, os.SEEK_END)
-    size = int(stream.tell())
-    stream.seek(max(0, size - max_bytes), os.SEEK_SET)
-    return stream.read().decode("utf-8", errors="replace")[-16_000:]
+class _OutputBudget:
+    """Count combined child output without retaining its complete content."""
+
+    def __init__(self, limit_bytes: int) -> None:
+        self.limit_bytes = int(limit_bytes)
+        self.total_bytes = 0
+        self.exceeded = threading.Event()
+        self.lock = threading.Lock()
+
+    def add(self, size: int) -> None:
+        with self.lock:
+            self.total_bytes += int(size)
+            if self.total_bytes > self.limit_bytes:
+                self.exceeded.set()
+
+
+class _OutputTail:
+    """Retain only the final bounded bytes from one child output stream."""
+
+    def __init__(self, budget: _OutputBudget) -> None:
+        self._budget = budget
+        self._tail = bytearray()
+        self._lock = threading.Lock()
+
+    def add(self, block: bytes) -> None:
+        self._budget.add(len(block))
+        with self._lock:
+            self._tail.extend(block)
+            excess = len(self._tail) - PROCESS_OUTPUT_TAIL_BYTES
+            if excess > 0:
+                del self._tail[:excess]
+
+    def text(self) -> str:
+        with self._lock:
+            encoded = bytes(self._tail)
+        return encoded.decode("utf-8", errors="replace")[-16_000:]
+
+
+def _drain_output(stream: Any, capture: _OutputTail) -> None:
+    """Drain one child pipe into a fixed-size tail buffer."""
+
+    try:
+        for block in iter(lambda: stream.read(64 * 1024), b""):
+            capture.add(block)
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
 
 
 def run_process(
@@ -130,58 +179,92 @@ def run_process(
         else 0
     )
     started = time.monotonic()
-    with tempfile.TemporaryFile(mode="w+b") as stdout_stream, tempfile.TemporaryFile(
-        mode="w+b"
-    ) as stderr_stream:
-        try:
-            process = subprocess.Popen(
-                command,
-                cwd=str(cwd),
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                stdout=stdout_stream,
-                stderr=stderr_stream,
-                start_new_session=sys.platform != "win32",
-                creationflags=creation_flags,
-            )
-        except Exception as exc:
-            return {
-                "started": False,
-                "error": str(exc),
-                "exception_type": type(exc).__name__,
-            }
-
-        cancelled = False
-        timed_out = False
-        memory_exceeded = False
-        observed_memory: int | None = None
-        next_memory_check = 0.0
-        while process.poll() is None:
-            if cancellation_check is not None and cancellation_check():
-                cancelled = True
-                break
-            now = time.monotonic()
-            if now - started > timeout_seconds:
-                timed_out = True
-                break
-            if memory_limit_bytes > 0 and now >= next_memory_check:
-                next_memory_check = now + 0.5
-                observed_memory = process_memory_bytes(process.pid)
-                if observed_memory is not None and observed_memory > memory_limit_bytes:
-                    memory_exceeded = True
-                    break
-            time.sleep(0.05)
-        if cancelled or timed_out or memory_exceeded:
-            _terminate(process)
-        process.wait()
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=str(cwd),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=sys.platform != "win32",
+            creationflags=creation_flags,
+        )
+    except Exception as exc:
         return {
-            "started": True,
-            "returncode": process.returncode,
-            "stdout": _read_output_tail(stdout_stream),
-            "stderr": _read_output_tail(stderr_stream),
-            "cancelled": cancelled,
-            "timed_out": timed_out,
-            "memory_exceeded": memory_exceeded,
-            "observed_memory_bytes": observed_memory,
-            "elapsed_seconds": time.monotonic() - started,
+            "started": False,
+            "error": str(exc),
+            "exception_type": type(exc).__name__,
         }
+
+    if process.stdout is None or process.stderr is None:
+        _terminate(process)
+        return {
+            "started": False,
+            "error": "The child output pipes are unavailable.",
+            "exception_type": "RuntimeError",
+        }
+    output_budget = _OutputBudget(MAX_PROCESS_OUTPUT_BYTES)
+    stdout_capture = _OutputTail(output_budget)
+    stderr_capture = _OutputTail(output_budget)
+    readers = [
+        threading.Thread(
+            target=_drain_output,
+            args=(process.stdout, stdout_capture),
+            name="VibeCAD-worker-stdout",
+            daemon=True,
+        ),
+        threading.Thread(
+            target=_drain_output,
+            args=(process.stderr, stderr_capture),
+            name="VibeCAD-worker-stderr",
+            daemon=True,
+        ),
+    ]
+    for reader in readers:
+        reader.start()
+
+    cancelled = False
+    timed_out = False
+    memory_exceeded = False
+    output_exceeded = False
+    observed_memory: int | None = None
+    next_memory_check = 0.0
+    while process.poll() is None:
+        if cancellation_check is not None and cancellation_check():
+            cancelled = True
+            break
+        if output_budget.exceeded.is_set():
+            output_exceeded = True
+            break
+        now = time.monotonic()
+        if now - started > timeout_seconds:
+            timed_out = True
+            break
+        if memory_limit_bytes > 0 and now >= next_memory_check:
+            next_memory_check = now + 0.5
+            observed_memory = process_memory_bytes(process.pid)
+            if observed_memory is not None and observed_memory > memory_limit_bytes:
+                memory_exceeded = True
+                break
+        time.sleep(0.05)
+    if cancelled or timed_out or memory_exceeded or output_exceeded:
+        _terminate(process)
+    process.wait()
+    for reader in readers:
+        reader.join(timeout=3.0)
+    output_exceeded = bool(output_exceeded or output_budget.exceeded.is_set())
+    return {
+        "started": True,
+        "returncode": process.returncode,
+        "stdout": stdout_capture.text(),
+        "stderr": stderr_capture.text(),
+        "cancelled": cancelled,
+        "timed_out": timed_out,
+        "memory_exceeded": memory_exceeded,
+        "output_exceeded": output_exceeded,
+        "output_bytes": output_budget.total_bytes,
+        "output_limit_bytes": output_budget.limit_bytes,
+        "observed_memory_bytes": observed_memory,
+        "elapsed_seconds": time.monotonic() - started,
+    }
