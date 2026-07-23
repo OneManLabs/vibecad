@@ -36,6 +36,31 @@ def test_candidate_waiter_accepts_one_exact_decision() -> None:
     assert waiter.decision == "accept"
 
 
+def test_stopped_question_round_cannot_accept_stale_answers(monkeypatch) -> None:
+    dock = _Dock()
+    cancelled = True
+    waiter = gui._QuestionWaiter(lambda: cancelled)
+    gui._pending_question_waiter = waiter
+    gui._pending_question_request = [{"id": "case-use", "question": "Where?"}]
+    monkeypatch.setattr(gui, "_find_dock", lambda: dock)
+    monkeypatch.setattr(
+        gui,
+        "_collect_question_answers",
+        lambda _dock: [{"id": "case-use", "answer": "desktop"}],
+    )
+    monkeypatch.setattr(gui, "_hide_question_panel", lambda *_args: None)
+    monkeypatch.setattr(gui, "_set_status_line", lambda *_args, **_kwargs: None)
+    try:
+        gui._submit_question_answers()
+        assert waiter.completed.is_set()
+        assert waiter.answers == []
+        assert gui._pending_question_waiter is None
+        assert gui._pending_question_request == []
+    finally:
+        gui._pending_question_waiter = None
+        gui._pending_question_request = []
+
+
 def test_stable_run_states_render_in_order(monkeypatch) -> None:
     dock = _Dock()
     observed = []

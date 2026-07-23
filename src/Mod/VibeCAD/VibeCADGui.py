@@ -158,13 +158,25 @@ class _DocumentThreadCall:
 class _QuestionWaiter:
     """Event-driven bridge between provider worker and the question UI."""
 
-    def __init__(self) -> None:
+    def __init__(self, cancellation_check: Any) -> None:
         self.completed = threading.Event()
+        self._lock = threading.Lock()
+        self._cancellation_check = cancellation_check
         self.answers: list[dict[str, Any]] = []
 
-    def finish(self, answers: list[dict[str, Any]]) -> None:
-        self.answers = list(answers)
-        self.completed.set()
+    def cancelled(self) -> bool:
+        try:
+            return bool(self._cancellation_check())
+        except Exception:
+            return True
+
+    def finish(self, answers: list[dict[str, Any]]) -> bool:
+        with self._lock:
+            if self.completed.is_set():
+                return False
+            self.answers = [] if self.cancelled() else list(answers)
+            self.completed.set()
+            return True
 
 
 class _CandidateDecisionWaiter:
@@ -1537,6 +1549,13 @@ def _submit_question_answers() -> None:
     if waiter is None:
         _hide_question_panel(dock)
         return
+    if waiter.cancelled():
+        _pending_question_request = []
+        _pending_question_waiter = None
+        _hide_question_panel(dock)
+        waiter.finish([])
+        _set_status_line("The stopped CAD run cannot accept these answers.", dock=dock)
+        return
     answers = _collect_question_answers(dock)
     if not answers:
         _set_status_line("Answer at least one design question.", dock=dock)
@@ -1554,6 +1573,9 @@ def _begin_question_round(
     global _pending_question_request, _pending_question_waiter
     if _pending_question_waiter is not None:
         raise RuntimeError("Another VibeCAD question round is already active.")
+    if waiter.cancelled():
+        waiter.finish([])
+        return
     dock = _find_dock()
     if dock is None:
         raise RuntimeError("The VibeCAD panel is not open.")
@@ -1578,7 +1600,9 @@ def _request_user_answers(
     questions: list[dict[str, Any]],
     cancellation_check: Any,
 ) -> list[dict[str, Any]]:
-    waiter = _QuestionWaiter()
+    if cancellation_check():
+        return []
+    waiter = _QuestionWaiter(cancellation_check)
     _dispatch_to_document_thread(lambda: _begin_question_round(questions, waiter))
     while not waiter.completed.wait(0.1):
         if cancellation_check():

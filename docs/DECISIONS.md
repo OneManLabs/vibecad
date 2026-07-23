@@ -595,3 +595,23 @@ is part of the validated surface contract, and its tool schemas remain
 content-bound. The rule permits Sketcher tools only when the scope contains
 both `partdesign.edit_sketch` and `sketcher.close_sketch`. It does not permit a
 general mixed-workbench surface.
+
+## D-075: Question answers are bound to one live GUI run
+
+Date: 2026-07-22. Status: Accepted.
+
+Each GUI question waiter checks the cancellation state of the run that created
+it. It can finish only once. Stop clears the active question round. A question
+round that races with Stop finishes without answers, and the answer control
+rejects a submission after cancellation. Answers from a stopped run cannot
+resume or mutate that run.
+
+## D-076: Large progress events use bounded content evidence
+
+Date: 2026-07-22. Status: Accepted.
+
+The live benchmark does not retain a progress event larger than its fixed byte
+limit. It replaces that event with its event name, tool name when present,
+Boolean result when present, original byte count, and SHA-256. This complete
+bounded summary is not a dropped event and does not stop a valid CAD run. Event
+count and total retained-byte limits still fail closed.

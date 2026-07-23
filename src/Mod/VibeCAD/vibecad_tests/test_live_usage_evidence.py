@@ -305,6 +305,12 @@ def test_progress_ledger_redacts_deltas_and_enforces_fixed_bounds() -> None:
     assert len(retained["text_sha256"]) == 64
 
     measured.progress({"event": "oversized", "payload": "x" * (LIVE_MAX_PROGRESS_EVENT_BYTES * 2)})
+    oversized = measured.events[1]
+    assert oversized["event"] == "oversized"
+    assert oversized["oversized_event_bytes"] > LIVE_MAX_PROGRESS_EVENT_BYTES
+    assert len(oversized["oversized_event_sha256"]) == 64
+    assert measured.limit_error is None
+    assert measured.dropped_event_count == 0
     for index in range(LIVE_MAX_RETAINED_PROGRESS_EVENTS + 5):
         measured.progress({"event": "tick", "index": index})
     snapshot = measured.snapshot()

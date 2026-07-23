@@ -3,6 +3,49 @@
 Last update: 2026-07-22. Active work: Phase 1 packaging, Phase 4 live benchmark
 hardening, Phase 7 release hardening, and Phase 8 portability evidence.
 
+## P4-005 first live CAD-tool checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The exact-source attempt reached ChatGPT for all seven cases and
+executed native CAD tools. Six cases then stopped because a valid
+`tool_call_completed` progress event was larger than the 8,192-byte evidence
+limit. Oversized progress events now retain the event name, tool name, result
+state, exact byte count, and SHA-256 without retaining the large payload. This
+is bounded evidence, not a dropped event. The export case produced a valid,
+reopenable STL and one accepted provenance revision; its expected revision
+contract now reflects that persistent design-brief update.
+
+The user's Raspberry Pi enclosure attempt also exposed a GUI lifecycle defect.
+The main request was submitted as steering while an accidental `c` run was
+active. Stop cancelled that run, but stale question answers were later accepted
+by its waiter. Question waiters are now bound to their run cancellation state,
+finish only once, and reject answers after Stop.
+
+Files changed: Live evidence monitor, live export acceptance checks, assistant
+question lifecycle, focused tests, and project records.
+
+Tests added: Oversized progress events become content-bound summaries without a
+limit failure. A stopped question round cannot accept stale answers.
+
+Tests run: The combined focused group passed 126 tests.
+
+Results: All seven live cases made one real ChatGPT request. The cases executed
+between 4 and 14 tool calls. The export produced a valid 20 mm STL. The attempt
+became unscorable because the worktree changed during execution while this
+user-visible lifecycle defect was fixed. No rate is claimed.
+
+Benchmark impact: The provider and native tool path now runs. A new clean
+exact-source attempt is required.
+
+Known issues: The current developer process must restart to load the question
+lifecycle fix.
+
+Next milestone: Commit the fixes, rebuild the installed scripts, and rerun all
+seven live cases from the exact clean commit.
+
+External blockers: None.
+
 ## P4-005 controlled-surface wire checkpoint: 2026-07-22
 
 Milestone: P4-005 live Tier 1 benchmark execution.

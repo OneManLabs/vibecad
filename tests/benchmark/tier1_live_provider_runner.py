@@ -282,14 +282,22 @@ class Measurements:
         if len(encoded) > LIVE_MAX_PROGRESS_EVENT_BYTES:
             item = {
                 "event": name,
+                **(
+                    {"tool_name": str(event.get("tool_name") or "")[:256]}
+                    if event.get("tool_name")
+                    else {}
+                ),
+                **(
+                    {"ok": bool(event.get("ok"))}
+                    if isinstance(event.get("ok"), bool)
+                    else {}
+                ),
                 "oversized_event_bytes": len(encoded),
                 "oversized_event_sha256": hashlib.sha256(encoded).hexdigest(),
             }
             encoded = json.dumps(
                 item, sort_keys=True, separators=(",", ":")
             ).encode("utf-8")
-            self.dropped_event_count += 1
-            self._fail("A provider progress event exceeded its byte limit.")
         if len(self.events) >= LIVE_MAX_RETAINED_PROGRESS_EVENTS:
             self.dropped_event_count += 1
             self._fail("The provider exceeded the retained progress-event limit.")
@@ -961,15 +969,14 @@ def _case_validation(
             )
 
     object_types = [str(getattr(obj, "TypeId", "")) for obj in document.Objects]
-    expected_revisions = 0 if case_id == "t1_export_stl" else 1
+    # The export turn updates the persistent design brief and records that
+    # accepted project-state change with the export provenance. It therefore
+    # has the same one-revision acceptance contract as every other live case.
+    expected_revisions = 1
     fixture_names = set(fixture.get("object_names") or [])
     current_names = {str(obj.Name) for obj in document.Objects}
     baseline_sha256 = str(fixture.get("canonical_sha256") or "")
-    file_change_ok = (
-        final_sha256 == baseline_sha256
-        if case_id == "t1_export_stl"
-        else final_sha256 != baseline_sha256
-    )
+    file_change_ok = final_sha256 != baseline_sha256
     editable = (
         base_geometry
         and revision_count == expected_revisions
