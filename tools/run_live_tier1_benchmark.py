@@ -358,6 +358,7 @@ def execute_live_benchmark(
     environment = minimal_child_environment(
         {
             "QT_QPA_PLATFORM": "offscreen",
+            "VIBECAD_LIVE_BENCHMARK_REPO_ROOT": str(ROOT.resolve()),
             "VIBECAD_LIVE_BENCHMARK_OUTPUT": str(run_directory.resolve()),
             "VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT": source_commit,
             "VIBECAD_LIVE_BENCHMARK_PROVIDER": str(checked_readiness["provider"]),

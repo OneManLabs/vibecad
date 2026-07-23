@@ -14,6 +14,14 @@ import sys
 import time
 from typing import Any
 
+# FreeCAD's GUI test runner does not add its working directory to sys.path.
+# Accept only the launcher-provided, absolute repository root. The launcher
+# content-binds this source tree before and after the child process runs.
+_REPO_ROOT = Path(os.environ.get("VIBECAD_LIVE_BENCHMARK_REPO_ROOT", ""))
+if not _REPO_ROOT.is_absolute() or not (_REPO_ROOT / "tools").is_dir():
+    raise RuntimeError("The live benchmark repository root is not valid.")
+sys.path.insert(0, str(_REPO_ROOT))
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

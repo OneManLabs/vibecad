@@ -288,6 +288,9 @@ def test_live_child_receives_only_allowlisted_ambient_values(
         assert environment["HOME"] == str(tmp_path / "safe-home")
         assert environment["PATH"] == os.defpath
         assert environment["QT_QPA_PLATFORM"] == "offscreen"
+        assert environment["VIBECAD_LIVE_BENCHMARK_REPO_ROOT"] == str(
+            Path(__file__).resolve().parents[4]
+        )
         assert environment["VIBECAD_LIVE_BENCHMARK_SOURCE_COMMIT"] == SOURCE_COMMIT
         return _completed_process_result(command, **kwargs)
 

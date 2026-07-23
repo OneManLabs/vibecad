@@ -709,3 +709,38 @@ score the run.
 
 External blockers: Production signing and notarization still need Apple
 credentials. They do not block the developer executable or live benchmark.
+
+## P4-005 live-launch import checkpoint: 2026-07-22
+
+Milestone: P4-005 live Tier 1 benchmark execution.
+
+Implemented: The first GUI launch stopped before it sent a provider request.
+FreeCAD's GUI test runner did not put the repository root on `sys.path`. The
+launcher now supplies its exact absolute repository root through the minimal
+child environment. The runner validates that path and adds it before it imports
+the content-bound readiness and evidence helpers.
+
+Files changed: Live benchmark launcher, GUI runner, focused regression test, and
+project records.
+
+Tests added: The minimal-child-environment test now requires the exact repository
+root and still rejects hostile ambient `PYTHONPATH` values.
+
+Tests run: The focused launcher test passed 44 tests. The combined live
+contract, launcher, and score-integrity group passed 89 tests. The installed
+VibeCAD scripts target rebuilt successfully.
+
+Results: The failed attempt created no raw case evidence and sent no model
+prompt. It is not a benchmark attempt. The corrected code is ready for an
+exact-clean-commit live run.
+
+Benchmark impact: No live-model rate is claimed.
+
+Known issues: The offscreen GUI still reports that it cannot create an OpenGL
+context. This warning did not cause the import fault, but it can affect later
+viewport work.
+
+Next milestone: Commit and push this tested fix only to OneManLabs. Run all seven
+live Tier 1 cases from that clean commit.
+
+External blockers: None for the live run.
